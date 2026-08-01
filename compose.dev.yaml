@@ -1,0 +1,18 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8080:8080"
+      - "5005:5005"  # debug remoto
+    volumes:
+      - .:/app
+      - maven-cache:/root/.m2
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - SPRING_DEVTOOLS_RESTART_ENABLED=true
+    command: ./mvnw spring-boot:run
+
+volumes:
+  maven-cache:

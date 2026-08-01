@@ -1,0 +1,8 @@
+# Dockerfile.dev
+FROM eclipse-temurin:21-jdk-alpine
+WORKDIR /app
+
+RUN apk add --no-cache maven
+
+EXPOSE 8080
+CMD ["./mvnw", "spring-boostat:run", "-Dspring-boot.run.jvmArguments='-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005'"]

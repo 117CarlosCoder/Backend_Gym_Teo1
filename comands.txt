@@ -1,0 +1,13 @@
+# comandos
+dev:
+	docker compose -f docker-compose.dev.yml up --build
+
+build:
+	docker compose up --build
+
+run:
+    docker compose up
+
+stop:
+	docker compose -f docker-compose.dev.yml down
+	docker-compose down
