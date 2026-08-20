@@ -1,0 +1,45 @@
+services:
+  db:
+    image: mariadb:11
+    container_name: gym_db
+    environment:
+      - MARIADB_ROOT_PASSWORD=${DB_PASSWORD}
+      - MARIADB_DATABASE=${DB_NAME}
+      - MARIADB_USER=${DB_USER}
+      - MARIADB_PASSWORD=${DB_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: [ "CMD", "healthcheck.sh", "--connect", "--innodb_initialized" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8080:8080"
+      - "5005:5005"  # debug remoto
+    volumes:
+      - .:/app
+      - maven-cache:/root/.m2
+    env_file:
+      - .env
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - SPRING_DEVTOOLS_RESTART_ENABLED=true
+      - DB_URL=jdbc:mariadb://db:3306/${DB_NAME}
+      - USER_SECURITY=${USER_SECURITY}
+      - PASSWORD_SECURITY=${PASSWORD_SECURITY}
+    depends_on:
+      db:
+        condition: service_healthy
+    command: mvn spring-boot:run -Dspring-boot.run.jvmArguments="-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
+
+volumes:
+  mariadb_data:
+  maven-cache:
