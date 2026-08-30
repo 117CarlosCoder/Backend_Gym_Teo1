@@ -23,6 +23,8 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8080:8080"
+    env_file:
+      - .env
     environment:
       SPRING_PROFILES_ACTIVE: prod
       DB_URL: jdbc:mariadb://db:3306/${DB_NAME}
@@ -31,6 +33,11 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       USER_SECURITY: ${USER_SECURITY}
       PASSWORD_SECURITY: ${PASSWORD_SECURITY}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION: ${JWT_EXPIRATION}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      RESEND_FROM: ${RESEND_FROM}
+      DATA_INITIALIZER_ENABLED: ${DATA_INITIALIZER_ENABLED:-true}
     depends_on:
       db:
         condition: service_healthy
