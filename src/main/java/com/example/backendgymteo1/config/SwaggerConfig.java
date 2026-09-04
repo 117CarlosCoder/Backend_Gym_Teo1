@@ -29,7 +29,9 @@ public class SwaggerConfig {
     private static final List<String> ORDERED_TAGS = List.of(
             "Autenticación",
             "Roles",
-            "Usuarios"
+            "Usuarios",
+            "Socios",
+            "Membresías"
     );
 
     @Bean
@@ -48,7 +50,9 @@ public class SwaggerConfig {
                 .tags(List.of(
                         new Tag().name("Autenticación").description("Endpoints para registro, inicio y cierre de sesión en el gimnasio"),
                         new Tag().name("Roles").description("Consulta del catálogo de roles del gimnasio"),
-                        new Tag().name("Usuarios").description("Gestión integral de usuarios, perfiles y membresías")
+                        new Tag().name("Usuarios").description("Gestión integral de usuarios y perfiles"),
+                        new Tag().name("Socios").description("Operaciones de administración y consulta de socios del gimnasio"),
+                        new Tag().name("Membresías").description("Operaciones para la emisión, consulta y gestión de membresías de socios")
                 ))
                 .addSecurityItem(new SecurityRequirement().addList(SECURITY_SCHEME_NAME))
                 .components(new Components()

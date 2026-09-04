@@ -22,9 +22,11 @@ public class UserDataInitializer implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
+        inicializarPlanesSiNoExisten();
+
         Integer userCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM usuario", Integer.class);
         if (userCount != null && userCount > 0) {
-            log.info("[DataInitializer] La tabla 'usuario' ya contiene {} registro(s). Se omite la inicialización.", userCount);
+            log.info("[DataInitializer] La tabla 'usuario' ya contiene {} registro(s). Se omite la inicialización de usuarios.", userCount);
             return;
         }
 
@@ -74,5 +76,22 @@ public class UserDataInitializer implements CommandLineRunner {
                 "INSERT INTO usuario (id_usuario, id_rol, dpi, nombres, apellidos, correo, telefono, username, password, activo, fecha_creacion, doble_autenticacion) " +
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 0)",
                 id, idRol, dpi, nombres, apellidos, correo, telefono, username, password, LocalDateTime.now());
+    }
+
+    private void inicializarPlanesSiNoExisten() {
+        try {
+            Integer planCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM plan_membresia", Integer.class);
+            if (planCount == null || planCount == 0) {
+                jdbcTemplate.update(
+                        "INSERT INTO plan_membresia (id_plan, nombre, duracion, precio, descripcion) VALUES " +
+                        "(1, 'Plan Mensual', 30, 250.00, 'Acceso ilimitado por 30 días'), " +
+                        "(2, 'Plan Trimestral', 90, 650.00, 'Acceso ilimitado por 3 meses con descuento'), " +
+                        "(3, 'Plan Anual', 365, 2400.00, 'Acceso completo anual y evaluación nutricional') " +
+                        "ON DUPLICATE KEY UPDATE nombre=VALUES(nombre)");
+                log.info("[DataInitializer] Carga inicial de planes de membresía completada exitosamente.");
+            }
+        } catch (Exception e) {
+            log.warn("[DataInitializer] No se pudo verificar/inicializar planes de membresía: {}", e.getMessage());
+        }
     }
 }
