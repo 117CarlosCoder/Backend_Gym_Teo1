@@ -60,7 +60,7 @@ public class UserDataInitializer implements CommandLineRunner {
                 6, LocalDate.of(2024, 2, 15));
 
         // 4. Registro de Socios
-        jdbcTemplate.update("INSERT INTO socio (id_socio, fecha_registro) VALUES (?, ?), (?, ?), (?, ?), (?, ?), (?, ?)",
+        jdbcTemplate.update("INSERT INTO socio (id_socio, fecha_registro, id_sucursal) VALUES (?, ?, 1), (?, ?, 1), (?, ?, 1), (?, ?, 1), (?, ?, 1)",
                 4, LocalDate.of(2024, 3, 1),
                 5, LocalDate.of(2024, 3, 15),
                 8, LocalDate.of(2024, 4, 1),
