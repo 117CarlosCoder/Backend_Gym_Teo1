@@ -1,6 +1,8 @@
 package com.example.backendgymteo1.repository;
 
 import com.example.backendgymteo1.entity.Socio;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -18,6 +20,10 @@ public interface SocioRepository extends JpaRepository<Socio, Integer> {
 
     @Query("SELECT s FROM Socio s JOIN FETCH s.usuario u WHERE u.estado = true")
     List<Socio> findAllActiveWithUser();
+
+    @Query(value = "SELECT s FROM Socio s JOIN FETCH s.usuario u WHERE u.estado = true",
+           countQuery = "SELECT COUNT(s) FROM Socio s JOIN s.usuario u WHERE u.estado = true")
+    Page<Socio> findAllActiveWithUser(Pageable pageable);
 
     @Query("SELECT s FROM Socio s JOIN FETCH s.usuario u WHERE s.id = :id AND u.estado = true")
     Optional<Socio> findByIdAndActiveWithUser(@Param("id") Integer id);

@@ -6,13 +6,17 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.MapsId;
 import jakarta.persistence.OneToOne;
+import jakarta.persistence.PostLoad;
+import jakarta.persistence.PostPersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
+import org.springframework.data.domain.Persistable;
 
 import java.time.LocalDate;
 
@@ -24,7 +28,7 @@ import java.time.LocalDate;
 @Builder
 @Entity
 @Table(name = "socio")
-public class Socio {
+public class Socio implements Persistable<Integer> {
 
     @Id
     @Column(name = "id_socio")
@@ -38,4 +42,19 @@ public class Socio {
     @JoinColumn(name = "id_socio")
     @ToString.Exclude
     private User usuario;
+
+    @Transient
+    @Builder.Default
+    private boolean isNew = true;
+
+    @Override
+    public boolean isNew() {
+        return isNew;
+    }
+
+    @PostLoad
+    @PostPersist
+    void markNotNew() {
+        this.isNew = false;
+    }
 }

@@ -11,6 +11,8 @@ import com.example.backendgymteo1.repository.SocioRepository;
 import com.example.backendgymteo1.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,7 +46,7 @@ public class SocioService {
         String encodedPassword = passwordEncoder.encode(passwordPlana);
 
         User user = socioMapper.toUserEntity(request, encodedPassword);
-        user = userRepository.save(user);
+        user = userRepository.saveAndFlush(user);
 
         Socio socio = socioMapper.toSocioEntity(user, request.getFechaRegistro());
         socio = socioRepository.save(socio);
@@ -53,6 +55,11 @@ public class SocioService {
         emailService.enviarCredenciales(user.getCorreo(), nombreCompleto, passwordPlana, user.getRol().name());
 
         return socioMapper.toDto(socio, passwordPlana);
+    }
+
+    public Page<SocioResponseDto> findAll(Pageable pageable) {
+        return socioRepository.findAllActiveWithUser(pageable)
+                .map(socioMapper::toDto);
     }
 
     public List<SocioResponseDto> findAll() {
