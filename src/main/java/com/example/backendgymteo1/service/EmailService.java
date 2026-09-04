@@ -81,4 +81,39 @@ public class EmailService {
 
         enviarCorreo(destinatario, "Bienvenido al Gimnasio - Tus credenciales de acceso", htmlContent);
     }
+
+    public void enviarNotificacionCancelacionMembresia(
+            String destinatario,
+            String nombreSocio,
+            String nombrePlan,
+            String motivo,
+            boolean reembolso,
+            java.math.BigDecimal montoReembolso) {
+        if (apiKey == null || apiKey.isBlank()) {
+            log.warn("Resend API Key no configurada. Cancelación de membresía para {}: [Plan: {}, Motivo: {}, Reembolso: {}]",
+                    destinatario, nombrePlan, motivo, reembolso);
+            return;
+        }
+
+        String detalleReembolso = reembolso
+                ? String.format("<p style='font-size: 14px; color: #27ae60;'><strong>Reembolso autorizado:</strong> Q. %.2f</p>", montoReembolso != null ? montoReembolso : java.math.BigDecimal.ZERO)
+                : "<p style='font-size: 14px; color: #7f8c8d;'><strong>Reembolso:</strong> No aplica</p>";
+
+        String htmlContent = String.format("""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+                <h2 style="color: #c0392b; text-align: center;">Notificación de Cancelación de Membresía</h2>
+                <p style="font-size: 16px; color: #333;">Estimado(a) <strong>%s</strong>,</p>
+                <p style="font-size: 14px; color: #555;">Le informamos que su membresía correspondiente al <strong>%s</strong> ha sido cancelada en el sistema.</p>
+                <div style="background-color: #fcf3f2; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #e74c3c;">
+                    <p style="margin: 5px 0; font-size: 14px;"><strong>Motivo:</strong> %s</p>
+                    %s
+                </div>
+                <p style="font-size: 13px; color: #7f8c8d;">Si tiene alguna duda o considera que esto es un error, por favor acérquese a recepción o contáctenos por este medio.</p>
+                <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+                <p style="font-size: 12px; color: #95a5a6; text-align: center;">Administración del Gimnasio &copy; 2026</p>
+            </div>
+            """, nombreSocio, nombrePlan, motivo, detalleReembolso);
+
+        enviarCorreo(destinatario, "Notificación de Cancelación de Membresía - Gimnasio", htmlContent);
+    }
 }

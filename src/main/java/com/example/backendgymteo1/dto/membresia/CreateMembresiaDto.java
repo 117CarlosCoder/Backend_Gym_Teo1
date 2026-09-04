@@ -8,21 +8,25 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-@Schema(description = "Datos para crear/adquirir una nueva membresía para un socio")
+@Schema(description = "Datos para crear/adquirir una nueva membresía para un socio con soporte multisucursal")
 public class CreateMembresiaDto {
 
     @Schema(description = "ID del socio al que se le asignará la membresía", example = "4", requiredMode = Schema.RequiredMode.REQUIRED)
     @NotNull(message = "El ID del socio es obligatorio")
     private Integer idSocio;
 
-    @Schema(description = "ID del plan de membresía seleccionado", example = "1", requiredMode = Schema.RequiredMode.REQUIRED)
+    @Schema(description = "ID del plan / tipo de membresía seleccionado", example = "1", requiredMode = Schema.RequiredMode.REQUIRED)
     @NotNull(message = "El ID del plan es obligatorio")
     private Integer idPlan;
+
+    @Schema(description = "Lista de IDs de sucursales habilitadas (multisucursal)", example = "[1, 2]")
+    private List<Integer> sucursalIds;
 
     @Schema(description = "Fecha de inicio de la membresía (por defecto la fecha actual si se omite)", example = "2026-03-01")
     private LocalDate fechaInicio;
