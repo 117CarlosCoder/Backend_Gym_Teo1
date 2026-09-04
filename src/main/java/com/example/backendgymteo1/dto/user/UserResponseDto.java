@@ -32,6 +32,12 @@ public class UserResponseDto {
     @Schema(description = "Número de teléfono", example = "+502 55551234")
     private String telefono;
 
+    @Schema(description = "Dirección de residencia", example = "10 Calle 4-20 Zona 1")
+    private String direccion;
+
+    @Schema(description = "Fecha de nacimiento", example = "1995-05-15")
+    private java.time.LocalDate fechaNacimiento;
+
     @Schema(description = "Correo electrónico", example = "juan.perez@gym.com")
     private String correo;
 

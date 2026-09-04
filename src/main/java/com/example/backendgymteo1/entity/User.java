@@ -22,6 +22,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -60,6 +61,12 @@ public class User implements UserDetails {
 
     @Column(name = "telefono", length = 20)
     private String telefono;
+
+    @Column(name = "direccion", length = 255)
+    private String direccion;
+
+    @Column(name = "fecha_nacimiento")
+    private LocalDate fechaNacimiento;
 
     @Column(name = "username", length = 50, unique = true)
     private String username;

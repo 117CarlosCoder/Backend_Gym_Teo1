@@ -30,8 +30,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-
 @Tag(name = "Socios", description = "Operaciones de administración y consulta de socios del gimnasio")
 @RestController
 @RequestMapping("/socios")
@@ -41,18 +39,20 @@ public class SocioController {
 
     private final SocioService socioService;
 
-    @Operation(summary = "Registrar un nuevo socio", description = "Requiere rol ADMIN o RECEPCIONISTA. La contraseña es autogenerada de forma segura y notificada al socio por correo electrónico.")
+    @Operation(summary = "Registrar un nuevo socio", description = "Requiere rol ADMIN o RECEPCIONISTA. Recibe datos personales, dirección, fecha de nacimiento y sucursal. La contraseña es autogenerada y enviada por correo. Registra evento en auditoría.")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "201", description = "Socio registrado exitosamente",
+            @ApiResponse(responseCode = "201", description = "Socio registrado exitosamente con su ID",
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = SocioResponseDto.class))),
-            @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos", content = @Content),
+            @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos o correo/DPI duplicado", content = @Content),
             @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
             @ApiResponse(responseCode = "403", description = "Acceso denegado", content = @Content)
     })
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
-    public ResponseEntity<SocioResponseDto> create(@Valid @RequestBody CreateSocioDto request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(socioService.create(request));
+    public ResponseEntity<SocioResponseDto> create(
+            @Valid @RequestBody CreateSocioDto request,
+            @CurrentUser User currentUser) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(socioService.create(request, currentUser));
     }
 
     @Operation(summary = "Listar socios activos con paginación", description = "Requiere rol ADMIN, RECEPCIONISTA o ENTRENADOR. Soporta parámetros de paginación (?page=0&size=10&sort=id,asc).")
@@ -68,9 +68,9 @@ public class SocioController {
         return ResponseEntity.ok(socioService.findAll(pageable));
     }
 
-    @Operation(summary = "Obtener perfil del socio autenticado actual (/me)", description = "Extrae los datos del socio a partir del token JWT de la sesión")
+    @Operation(summary = "Obtener perfil completo del socio autenticado actual (/me)", description = "Extrae los datos personales, membresía actual y última asistencia a partir del token JWT")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Perfil del socio autenticado",
+            @ApiResponse(responseCode = "200", description = "Perfil completo del socio autenticado",
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = SocioResponseDto.class))),
             @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
             @ApiResponse(responseCode = "404", description = "El usuario autenticado no tiene perfil de socio", content = @Content)
@@ -80,9 +80,9 @@ public class SocioController {
         return ResponseEntity.ok(socioService.findById(currentUser.getId()));
     }
 
-    @Operation(summary = "Buscar socio por ID", description = "Requiere rol ADMIN, RECEPCIONISTA o ENTRENADOR")
+    @Operation(summary = "Consultar datos completos del socio por ID", description = "Retorna todos los datos del socio: datos personales, membresía actual (si existe), última asistencia y estado. Valida que el socio exista (404 si no existe). Requiere rol ADMIN, RECEPCIONISTA o ENTRENADOR.")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Socio encontrado",
+            @ApiResponse(responseCode = "200", description = "Datos completos del socio",
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = SocioResponseDto.class))),
             @ApiResponse(responseCode = "404", description = "Socio no encontrado", content = @Content),
             @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
@@ -94,11 +94,11 @@ public class SocioController {
         return ResponseEntity.ok(socioService.findById(id));
     }
 
-    @Operation(summary = "Actualizar información de un socio por ID", description = "Requiere rol ADMIN o RECEPCIONISTA")
+    @Operation(summary = "Actualizar información permitida de un socio", description = "Permite edición de: nombre, email, teléfono, dirección, fecha_nacimiento y sucursal. Valida email único si cambia. NO permite editar ID ni fecha de creación. Registra en auditoría quién realizó el cambio y qué campos fueron modificados.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Socio actualizado exitosamente",
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = SocioResponseDto.class))),
-            @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos", content = @Content),
+            @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos o email ya en uso", content = @Content),
             @ApiResponse(responseCode = "404", description = "Socio no encontrado", content = @Content),
             @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
             @ApiResponse(responseCode = "403", description = "Acceso denegado", content = @Content)
@@ -107,11 +107,12 @@ public class SocioController {
     @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
     public ResponseEntity<SocioResponseDto> update(
             @PathVariable Integer id,
-            @Valid @RequestBody UpdateSocioDto request) {
-        return ResponseEntity.ok(socioService.update(id, request));
+            @Valid @RequestBody UpdateSocioDto request,
+            @CurrentUser User currentUser) {
+        return ResponseEntity.ok(socioService.update(id, request, currentUser));
     }
 
-    @Operation(summary = "Desactivar un socio por ID", description = "Requiere rol ADMIN o RECEPCIONISTA")
+    @Operation(summary = "Desactivar un socio por ID (Soft Delete)", description = "Requiere rol ADMIN o RECEPCIONISTA. Registra en auditoría.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "204", description = "Socio desactivado exitosamente"),
             @ApiResponse(responseCode = "404", description = "Socio no encontrado", content = @Content),
@@ -120,8 +121,10 @@ public class SocioController {
     })
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
-    public ResponseEntity<Void> remove(@PathVariable Integer id) {
-        socioService.remove(id);
+    public ResponseEntity<Void> remove(
+            @PathVariable Integer id,
+            @CurrentUser User currentUser) {
+        socioService.remove(id, currentUser);
         return ResponseEntity.noContent().build();
     }
 }

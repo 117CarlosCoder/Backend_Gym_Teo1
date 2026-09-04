@@ -22,6 +22,8 @@ public class UserMapper {
                 .nombres(user.getNombres())
                 .apellidos(user.getApellidos())
                 .telefono(user.getTelefono())
+                .direccion(user.getDireccion())
+                .fechaNacimiento(user.getFechaNacimiento())
                 .correo(user.getCorreo())
                 .rol(user.getRol())
                 .estado(user.isEstado())

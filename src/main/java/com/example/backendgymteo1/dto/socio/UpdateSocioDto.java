@@ -14,7 +14,7 @@ import java.time.LocalDate;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-@Schema(description = "Datos para actualizar la información de un socio")
+@Schema(description = "Datos permitidos para actualizar la información de un socio")
 public class UpdateSocioDto {
 
     @Schema(description = "Número de DPI del socio", example = "1000000000004")
@@ -30,12 +30,18 @@ public class UpdateSocioDto {
     @Schema(description = "Número de teléfono de contacto", example = "55550004")
     private String telefono;
 
+    @Schema(description = "Dirección de residencia", example = "12 Calle 5-45 Zona 1")
+    private String direccion;
+
+    @Schema(description = "Fecha de nacimiento", example = "1998-07-20")
+    private LocalDate fechaNacimiento;
+
     @Schema(description = "Correo electrónico del socio", example = "carlos.modificado@gymdemo.com")
     @Email(message = "Formato de correo inválido")
     private String correo;
 
-    @Schema(description = "Fecha de registro del socio", example = "2026-03-01")
-    private LocalDate fechaRegistro;
+    @Schema(description = "ID de la sucursal base", example = "1")
+    private Integer sucursalId;
 
     @Schema(description = "Estado de la cuenta del socio (activo o inactivo)", example = "true")
     private Boolean estado;

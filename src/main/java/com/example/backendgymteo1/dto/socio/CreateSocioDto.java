@@ -15,7 +15,7 @@ import java.time.LocalDate;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-@Schema(description = "Datos para crear un nuevo socio en el gimnasio")
+@Schema(description = "Datos para registrar un nuevo socio en el gimnasio")
 public class CreateSocioDto {
 
     @Schema(description = "Número de DPI del socio", example = "1000000000004", requiredMode = Schema.RequiredMode.REQUIRED)
@@ -34,10 +34,19 @@ public class CreateSocioDto {
     @Schema(description = "Número de teléfono de contacto", example = "55550004")
     private String telefono;
 
+    @Schema(description = "Dirección de residencia del socio", example = "12 Calle 5-45 Zona 1")
+    private String direccion;
+
+    @Schema(description = "Fecha de nacimiento del socio", example = "1998-07-20")
+    private LocalDate fechaNacimiento;
+
     @Schema(description = "Correo electrónico único", example = "carlos.socio@gymdemo.com", requiredMode = Schema.RequiredMode.REQUIRED)
     @NotBlank(message = "El correo es obligatorio")
     @Email(message = "Formato de correo inválido")
     private String correo;
+
+    @Schema(description = "ID de la sucursal de registro (por defecto 1 = Sucursal Central)", example = "1")
+    private Integer sucursalId;
 
     @Schema(description = "Fecha de registro del socio", example = "2026-03-01")
     private LocalDate fechaRegistro;

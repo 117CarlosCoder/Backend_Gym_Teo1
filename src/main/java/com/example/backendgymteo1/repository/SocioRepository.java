@@ -18,19 +18,19 @@ public interface SocioRepository extends JpaRepository<Socio, Integer> {
 
     Optional<Socio> findByIdAndUsuarioEstadoTrue(Integer id);
 
-    @Query("SELECT s FROM Socio s JOIN FETCH s.usuario u WHERE u.estado = true")
+    @Query("SELECT s FROM Socio s JOIN FETCH s.usuario u LEFT JOIN FETCH s.sucursal WHERE u.estado = true")
     List<Socio> findAllActiveWithUser();
 
-    @Query(value = "SELECT s FROM Socio s JOIN FETCH s.usuario u WHERE u.estado = true",
+    @Query(value = "SELECT s FROM Socio s JOIN FETCH s.usuario u LEFT JOIN FETCH s.sucursal WHERE u.estado = true",
            countQuery = "SELECT COUNT(s) FROM Socio s JOIN s.usuario u WHERE u.estado = true")
     Page<Socio> findAllActiveWithUser(Pageable pageable);
 
-    @Query("SELECT s FROM Socio s JOIN FETCH s.usuario u WHERE s.id = :id AND u.estado = true")
+    @Query("SELECT s FROM Socio s JOIN FETCH s.usuario u LEFT JOIN FETCH s.sucursal WHERE s.id = :id AND u.estado = true")
     Optional<Socio> findByIdAndActiveWithUser(@Param("id") Integer id);
 
-    @Query("SELECT s FROM Socio s JOIN FETCH s.usuario u WHERE u.correo = :correo AND u.estado = true")
+    @Query("SELECT s FROM Socio s JOIN FETCH s.usuario u LEFT JOIN FETCH s.sucursal WHERE u.correo = :correo AND u.estado = true")
     Optional<Socio> findByCorreoAndActiveWithUser(@Param("correo") String correo);
 
-    @Query("SELECT s FROM Socio s JOIN FETCH s.usuario u WHERE u.dpi = :dpi AND u.estado = true")
+    @Query("SELECT s FROM Socio s JOIN FETCH s.usuario u LEFT JOIN FETCH s.sucursal WHERE u.dpi = :dpi AND u.estado = true")
     Optional<Socio> findByDpiAndActiveWithUser(@Param("dpi") String dpi);
 }
