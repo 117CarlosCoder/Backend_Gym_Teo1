@@ -12,6 +12,8 @@ import com.example.backendgymteo1.repository.UserRepository;
 import com.example.backendgymteo1.service.profile.UserProfileManagerService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -31,14 +33,17 @@ public class AuthService {
     private final AuthMapper authMapper;
 
     public AuthResponseDto login(LoginRequestDto request) {
+        User user = userRepository.findByCorreo(request.getCorreo())
+                .orElseThrow(() -> new BadCredentialsException("El correo o la contraseña son incorrectos."));
+
+        if (!user.isEnabled() || !user.isEstado() || user.getEliminadoEn() != null) {
+            throw new DisabledException("La cuenta de usuario se encuentra inactiva o ha sido dada de baja.");
+        }
+
         authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
                         request.getCorreo(),
                         request.getContrasenia()));
-
-        User user = userRepository.findByCorreo(request.getCorreo())
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Usuario no encontrado con correo: " + request.getCorreo()));
 
         String jwtToken = jwtService.generarToken(user);
         return authMapper.toResponseDto(user, jwtToken);

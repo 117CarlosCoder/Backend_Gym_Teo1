@@ -141,7 +141,7 @@ public class User implements UserDetails {
 
     @Override
     public boolean isEnabled() {
-        return this.estado;
+        return this.estado && this.eliminadoEn == null;
     }
 
     @Override

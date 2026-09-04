@@ -55,6 +55,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
 
+                if (!userDetails.isEnabled()) {
+                    response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                    response.setContentType("application/json;charset=UTF-8");
+                    response.getWriter().write(
+                            "{\"error\": \"Usuario deshabilitado\", \"message\": \"Tu cuenta se encuentra inactiva o ha sido dada de baja.\"}");
+                    return;
+                }
+
                 if (jwtService.isTokenValid(jwt, userDetails)) {
                     UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                             userDetails,

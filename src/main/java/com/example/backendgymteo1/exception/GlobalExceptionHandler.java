@@ -2,6 +2,7 @@ package com.example.backendgymteo1.exception;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -13,6 +14,14 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<Map<String, String>> handleAccessDenied(AccessDeniedException ex) {
+        Map<String, String> error = new HashMap<>();
+        error.put("error", "Acceso denegado");
+        error.put("message", "No tienes permisos suficientes o tu membresía no se encuentra activa para acceder a este recurso.");
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+    }
 
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity<Map<String, String>> handleBadCredentials(BadCredentialsException ex) {
@@ -26,7 +35,9 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleDisabledUser(DisabledException ex) {
         Map<String, String> error = new HashMap<>();
         error.put("error", "Usuario deshabilitado");
-        error.put("message", "La cuenta de usuario se encuentra inactiva.");
+        error.put("message", (ex.getMessage() != null && !ex.getMessage().isBlank() && !ex.getMessage().equals("User is disabled"))
+                ? ex.getMessage()
+                : "La cuenta de usuario se encuentra inactiva o ha sido dada de baja.");
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
     }
 
