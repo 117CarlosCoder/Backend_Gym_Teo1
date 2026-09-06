@@ -125,6 +125,7 @@ public class SocioService {
                         .recepcionista(a.getRecepcionista() != null && a.getRecepcionista().getUsuario() != null
                                 ? a.getRecepcionista().getUsuario().getNombres() + " " + a.getRecepcionista().getUsuario().getApellidos()
                                 : null)
+                        .sucursal(a.getSucursal() != null ? a.getSucursal().getNombre() : null)
                         .build())
                 .orElse(null);
 

@@ -28,6 +28,15 @@ public class UltimaAsistenciaDto {
     @Schema(description = "Hora de salida del gimnasio", example = "09:00:00")
     private LocalTime horaSalida;
 
-    @Schema(description = "Nombre del recepcionista que registró la entrada", example = "María Castro")
+    @Schema(description = "Nombre del recepcionista o administrador que registró la entrada", example = "María Castro")
     private String recepcionista;
+
+    @Schema(description = "Nombre de la persona que marcó la asistencia", example = "Carlos Raúl López")
+    private String registradoPor;
+
+    @Schema(description = "Rol de la persona que marcó la asistencia", example = "ADMIN")
+    private String registradoPorRol;
+
+    @Schema(description = "Nombre de la sucursal donde se registró la asistencia", example = "Sucursal Central (Zona 1)")
+    private String sucursal;
 }

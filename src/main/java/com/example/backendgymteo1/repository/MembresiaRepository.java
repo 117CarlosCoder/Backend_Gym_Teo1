@@ -113,6 +113,6 @@ public interface MembresiaRepository extends JpaRepository<Membresia, Integer> {
             "ORDER BY m.fechaVencimiento DESC")
     Optional<Membresia> findActiveBySocioId(
             @Param("socioId") Integer socioId,
-            @Param("fechaActual") LocalDate fechaActual
+            @Param("fechaActual") LocalDate fechaActualmembresia_sucursal
     );
 }

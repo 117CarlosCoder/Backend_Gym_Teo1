@@ -35,12 +35,20 @@ public class Asistencia {
     private Integer id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "id_recepcionista", nullable = false)
+    @JoinColumn(name = "id_recepcionista")
     private Recepcionista recepcionista;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "id_usuario_registro")
+    private User usuarioRegistro;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "id_socio", nullable = false)
     private Socio socio;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "id_sucursal")
+    private Sucursal sucursal;
 
     @Column(name = "fecha", nullable = false)
     private LocalDate fecha;
