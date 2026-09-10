@@ -27,6 +27,20 @@ public class SocioResponseDto {
     @Schema(description = "Estado actual del socio (activo o inactivo)", example = "true")
     private Boolean estado;
 
+    @Schema(description = "Estado operativo del socio: ACTIVO (cuenta activa con membresía vigente), MOROSO (cuenta activa con membresía vencida o sin membresía), INACTIVO (dado de baja)", example = "ACTIVO", allowableValues = {"ACTIVO", "INACTIVO", "MOROSO"})
+    private String estadoSocio;
+
+    @Schema(description = "Nombre completo del socio para visualización directa", example = "Carlos Raúl López")
+    public String getNombreCompleto() {
+        if (usuario != null) {
+            String n = usuario.getNombres() != null ? usuario.getNombres() : "";
+            String a = usuario.getApellidos() != null ? usuario.getApellidos() : "";
+            String full = (n + " " + a).trim();
+            return full.isEmpty() ? null : full;
+        }
+        return null;
+    }
+
     @Schema(description = "Datos personales del usuario asociado al socio")
     private UserResponseDto usuario;
 

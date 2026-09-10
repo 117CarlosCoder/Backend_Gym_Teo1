@@ -45,4 +45,7 @@ public class UpdateSocioDto {
 
     @Schema(description = "Estado de la cuenta del socio (activo o inactivo)", example = "true")
     private Boolean estado;
+
+    @Schema(description = "Estado operativo del socio: ACTIVO o INACTIVO", example = "ACTIVO", allowableValues = {"ACTIVO", "INACTIVO"})
+    private String estadoSocio;
 }

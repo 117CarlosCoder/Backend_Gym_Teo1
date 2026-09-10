@@ -23,11 +23,13 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Socios", description = "Operaciones de administración y consulta de socios del gimnasio")
@@ -39,7 +41,7 @@ public class SocioController {
 
     private final SocioService socioService;
 
-    @Operation(summary = "Registrar un nuevo socio", description = "Requiere rol ADMIN o RECEPCIONISTA. Recibe datos personales, dirección, fecha de nacimiento y sucursal. La contraseña es autogenerada y enviada por correo. Registra evento en auditoría.")
+    @Operation(summary = "Registrar un nuevo socio", description = "Requiere rol ADMIN o RECEPCIONISTA. Recibe datos personales, dirección, fecha de nacimiento, sucursal y estado opcional (ACTIVO/INACTIVO). La contraseña es autogenerada y enviada por correo. Registra evento en auditoría.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Socio registrado exitosamente con su ID",
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = SocioResponseDto.class))),
@@ -55,7 +57,7 @@ public class SocioController {
         return ResponseEntity.status(HttpStatus.CREATED).body(socioService.create(request, currentUser));
     }
 
-    @Operation(summary = "Listar socios activos con paginación", description = "Requiere rol ADMIN, RECEPCIONISTA o ENTRENADOR. Soporta parámetros de paginación (?page=0&size=10&sort=id,asc).")
+    @Operation(summary = "Listar socios con filtro por estado y paginación", description = "Requiere rol ADMIN, RECEPCIONISTA o ENTRENADOR. Soporta filtrado por estado: ACTIVO (membresía vigente), MOROSO (membresía vencida o sin membresía), INACTIVO (dado de baja) o TODOS. Parámetros: ?estado=ACTIVO&page=0&size=10&sort=id,asc.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Página de socios obtenida exitosamente"),
             @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
@@ -64,8 +66,9 @@ public class SocioController {
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA', 'ENTRENADOR')")
     public ResponseEntity<Page<SocioResponseDto>> findAll(
+            @RequestParam(required = false) String estado,
             @PageableDefault(size = 10, sort = "id") Pageable pageable) {
-        return ResponseEntity.ok(socioService.findAll(pageable));
+        return ResponseEntity.ok(socioService.findAll(estado, pageable));
     }
 
     @Operation(summary = "Obtener perfil completo del socio autenticado actual (/me)", description = "Extrae los datos personales, membresía actual y última asistencia a partir del token JWT")
@@ -126,5 +129,21 @@ public class SocioController {
             @CurrentUser User currentUser) {
         socioService.remove(id, currentUser);
         return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "Reactivar un socio dado de baja", description = "Restaura la cuenta de un socio inactivo a activo. Requiere rol ADMIN o RECEPCIONISTA. Registra en auditoría.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Socio reactivado exitosamente",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = SocioResponseDto.class))),
+            @ApiResponse(responseCode = "404", description = "Socio no encontrado", content = @Content),
+            @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
+            @ApiResponse(responseCode = "403", description = "Acceso denegado", content = @Content)
+    })
+    @PatchMapping("/{id}/reactivar")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
+    public ResponseEntity<SocioResponseDto> reactivar(
+            @PathVariable Integer id,
+            @CurrentUser User currentUser) {
+        return ResponseEntity.ok(socioService.reactivar(id, currentUser));
     }
 }

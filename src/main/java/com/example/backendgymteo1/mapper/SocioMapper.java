@@ -34,6 +34,15 @@ public class SocioMapper {
             String temporaryPassword,
             MembresiaResumenDto membresiaActual,
             UltimaAsistenciaDto ultimaAsistencia) {
+        return toDto(socio, temporaryPassword, membresiaActual, ultimaAsistencia, null);
+    }
+
+    public SocioResponseDto toDto(
+            Socio socio,
+            String temporaryPassword,
+            MembresiaResumenDto membresiaActual,
+            UltimaAsistenciaDto ultimaAsistencia,
+            String estadoSocio) {
         if (socio == null) {
             return null;
         }
@@ -51,10 +60,22 @@ public class SocioMapper {
 
         Boolean estado = socio.getUsuario() != null ? socio.getUsuario().isEstado() : null;
 
+        String resolvedEstadoSocio = estadoSocio;
+        if (resolvedEstadoSocio == null) {
+            if (socio.getUsuario() != null && !socio.getUsuario().isEstado()) {
+                resolvedEstadoSocio = "INACTIVO";
+            } else if (membresiaActual != null) {
+                resolvedEstadoSocio = "ACTIVO";
+            } else {
+                resolvedEstadoSocio = "MOROSO";
+            }
+        }
+
         return SocioResponseDto.builder()
                 .id(socio.getId())
                 .fechaRegistro(socio.getFechaRegistro())
                 .estado(estado)
+                .estadoSocio(resolvedEstadoSocio)
                 .usuario(temporaryPassword != null
                         ? userMapper.toDto(socio.getUsuario(), temporaryPassword)
                         : userMapper.toDto(socio.getUsuario()))
@@ -65,6 +86,10 @@ public class SocioMapper {
     }
 
     public User toUserEntity(CreateSocioDto request, String encodedPassword) {
+        boolean activo = true;
+        if (request.getEstado() != null && "INACTIVO".equalsIgnoreCase(request.getEstado().trim())) {
+            activo = false;
+        }
         return User.builder()
                 .dpi(request.getDpi())
                 .nombres(request.getNombres())
@@ -75,7 +100,7 @@ public class SocioMapper {
                 .correo(request.getCorreo())
                 .contrasenia(encodedPassword)
                 .rol(Rol.cliente())
-                .estado(true)
+                .estado(activo)
                 .build();
     }
 
@@ -112,7 +137,9 @@ public class SocioMapper {
             if (request.getFechaNacimiento() != null) {
                 user.setFechaNacimiento(request.getFechaNacimiento());
             }
-            if (request.getEstado() != null) {
+            if (request.getEstadoSocio() != null && !request.getEstadoSocio().isBlank()) {
+                user.setEstado(!"INACTIVO".equalsIgnoreCase(request.getEstadoSocio().trim()));
+            } else if (request.getEstado() != null) {
                 user.setEstado(request.getEstado());
             }
         }

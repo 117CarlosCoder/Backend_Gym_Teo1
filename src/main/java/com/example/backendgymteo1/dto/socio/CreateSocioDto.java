@@ -50,4 +50,7 @@ public class CreateSocioDto {
 
     @Schema(description = "Fecha de registro del socio", example = "2026-03-01")
     private LocalDate fechaRegistro;
+
+    @Schema(description = "Estado inicial del socio: ACTIVO (por defecto) o INACTIVO", example = "ACTIVO", allowableValues = {"ACTIVO", "INACTIVO"})
+    private String estado;
 }

@@ -29,6 +29,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -97,20 +98,57 @@ public class SocioService {
     }
 
     public Page<SocioResponseDto> findAll(Pageable pageable) {
-        return socioRepository.findAllActiveWithUser(pageable)
-                .map(socioMapper::toDto);
+        return findAll(null, pageable);
+    }
+
+    public Page<SocioResponseDto> findAll(String estadoFiltro, Pageable pageable) {
+        LocalDate hoy = LocalDate.now();
+        Page<Socio> page;
+
+        if (estadoFiltro != null && !estadoFiltro.isBlank()) {
+            String filtro = estadoFiltro.trim().toUpperCase();
+            switch (filtro) {
+                case "ACTIVO" -> page = socioRepository.findAllWithActiveMembresia(hoy, pageable);
+                case "MOROSO" -> page = socioRepository.findAllMorosos(hoy, pageable);
+                case "INACTIVO" -> page = socioRepository.findAllInactiveWithUser(pageable);
+                case "TODOS" -> page = socioRepository.findAllWithUser(pageable);
+                default -> page = socioRepository.findAllActiveWithUser(pageable);
+            }
+        } else {
+            page = socioRepository.findAllActiveWithUser(pageable);
+        }
+
+        Set<Integer> activeSocioIds = membresiaRepository.findSocioIdsWithActiveMembresia(hoy);
+
+        return page.map(s -> {
+            String estadoCalculado;
+            if (s.getUsuario() != null && !s.getUsuario().isEstado()) {
+                estadoCalculado = "INACTIVO";
+            } else if (activeSocioIds.contains(s.getId())) {
+                estadoCalculado = "ACTIVO";
+            } else {
+                estadoCalculado = "MOROSO";
+            }
+            return socioMapper.toDto(s, null, null, null, estadoCalculado);
+        });
     }
 
     public List<SocioResponseDto> findAll() {
+        LocalDate hoy = LocalDate.now();
+        Set<Integer> activeSocioIds = membresiaRepository.findSocioIdsWithActiveMembresia(hoy);
         return socioRepository.findAllActiveWithUser()
                 .stream()
-                .map(socioMapper::toDto)
+                .map(s -> {
+                    String estadoCalculado = activeSocioIds.contains(s.getId()) ? "ACTIVO" : "MOROSO";
+                    return socioMapper.toDto(s, null, null, null, estadoCalculado);
+                })
                 .toList();
     }
 
     public SocioResponseDto findById(Integer id) {
         Socio socio = socioRepository.findByIdAndActiveWithUser(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Socio no encontrado con ID: " + id));
+                .orElseGet(() -> socioRepository.findByIdWithUser(id)
+                        .orElseThrow(() -> new ResourceNotFoundException("Socio no encontrado con ID: " + id)));
 
         MembresiaResumenDto membresiaResumen = membresiaRepository.findActiveBySocioId(id, LocalDate.now())
                 .map(membresiaMapper::toResumenDto)
@@ -140,7 +178,8 @@ public class SocioService {
     @Transactional(rollbackFor = Exception.class)
     public SocioResponseDto update(Integer id, UpdateSocioDto request, User usuarioActual) {
         Socio socio = socioRepository.findByIdAndActiveWithUser(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Socio no encontrado con ID: " + id));
+                .orElseGet(() -> socioRepository.findByIdWithUser(id)
+                        .orElseThrow(() -> new ResourceNotFoundException("Socio no encontrado con ID: " + id)));
 
         User user = socio.getUsuario();
 
@@ -223,5 +262,38 @@ public class SocioService {
                 socio.getId(),
                 "Baja lógica (soft delete) del socio con ID: " + socio.getId()
         );
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public SocioResponseDto reactivar(Integer id, User usuarioActual) {
+        Socio socio = socioRepository.findByIdWithUser(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Socio no encontrado con ID: " + id));
+
+        User user = socio.getUsuario();
+        user.setEstado(true);
+        user.setEliminadoEn(null);
+
+        String prefix = "del_" + user.getId() + "_";
+        if (user.getCorreo() != null && user.getCorreo().startsWith(prefix)) {
+            user.setCorreo(user.getCorreo().substring(prefix.length()));
+        }
+        if (user.getDpi() != null && user.getDpi().startsWith(prefix)) {
+            user.setDpi(user.getDpi().substring(prefix.length()));
+        }
+        if (user.getTelefono() != null && user.getTelefono().startsWith(prefix)) {
+            user.setTelefono(user.getTelefono().substring(prefix.length()));
+        }
+
+        userRepository.save(user);
+
+        auditoriaService.registrar(
+                usuarioActual,
+                "socio",
+                "UPDATE",
+                socio.getId(),
+                "Reactivación de socio previamente dado de baja con ID: " + socio.getId()
+        );
+
+        return findById(id);
     }
 }
