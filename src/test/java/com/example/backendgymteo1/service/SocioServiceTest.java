@@ -28,11 +28,17 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -256,5 +262,67 @@ class SocioServiceTest {
         verify(userRepository).save(socioUser);
         verify(socioRepository).save(socioEntity);
         verify(auditoriaService).registrar(eq(adminUser), eq("socio"), eq("UPDATE"), eq(10), anyString());
+    }
+
+    @Test
+    @DisplayName("Listar socios filtrando por estado ACTIVO")
+    void testFindAll_FilterByActivo() {
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<Socio> mockPage = new PageImpl<>(List.of(socioEntity));
+
+        when(socioRepository.findAllWithActiveMembresia(any(LocalDate.class), eq(pageable))).thenReturn(mockPage);
+        when(membresiaRepository.findSocioIdsWithActiveMembresia(any(LocalDate.class))).thenReturn(Set.of(10));
+
+        SocioResponseDto dto = SocioResponseDto.builder().id(10).estadoSocio("ACTIVO").build();
+        when(socioMapper.toDto(eq(socioEntity), any(), any(), any(), eq("ACTIVO"))).thenReturn(dto);
+
+        Page<SocioResponseDto> result = socioService.findAll("ACTIVO", pageable);
+
+        assertNotNull(result);
+        assertEquals(1, result.getTotalElements());
+        assertEquals("ACTIVO", result.getContent().get(0).getEstadoSocio());
+        verify(socioRepository).findAllWithActiveMembresia(any(LocalDate.class), eq(pageable));
+    }
+
+    @Test
+    @DisplayName("Listar socios filtrando por estado MOROSO")
+    void testFindAll_FilterByMoroso() {
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<Socio> mockPage = new PageImpl<>(List.of(socioEntity));
+
+        when(socioRepository.findAllMorosos(any(LocalDate.class), eq(pageable))).thenReturn(mockPage);
+        when(membresiaRepository.findSocioIdsWithActiveMembresia(any(LocalDate.class))).thenReturn(Set.of());
+
+        SocioResponseDto dto = SocioResponseDto.builder().id(10).estadoSocio("MOROSO").build();
+        when(socioMapper.toDto(eq(socioEntity), any(), any(), any(), eq("MOROSO"))).thenReturn(dto);
+
+        Page<SocioResponseDto> result = socioService.findAll("MOROSO", pageable);
+
+        assertNotNull(result);
+        assertEquals(1, result.getTotalElements());
+        assertEquals("MOROSO", result.getContent().get(0).getEstadoSocio());
+        verify(socioRepository).findAllMorosos(any(LocalDate.class), eq(pageable));
+    }
+
+    @Test
+    @DisplayName("Listar socios filtrando por estado INACTIVO")
+    void testFindAll_FilterByInactivo() {
+        Pageable pageable = PageRequest.of(0, 10);
+        User inactivoUser = User.builder().id(10).estado(false).build();
+        Socio inactivoSocio = Socio.builder().id(10).usuario(inactivoUser).build();
+        Page<Socio> mockPage = new PageImpl<>(List.of(inactivoSocio));
+
+        when(socioRepository.findAllInactiveWithUser(eq(pageable))).thenReturn(mockPage);
+        when(membresiaRepository.findSocioIdsWithActiveMembresia(any(LocalDate.class))).thenReturn(Set.of());
+
+        SocioResponseDto dto = SocioResponseDto.builder().id(10).estadoSocio("INACTIVO").build();
+        when(socioMapper.toDto(eq(inactivoSocio), any(), any(), any(), eq("INACTIVO"))).thenReturn(dto);
+
+        Page<SocioResponseDto> result = socioService.findAll("INACTIVO", pageable);
+
+        assertNotNull(result);
+        assertEquals(1, result.getTotalElements());
+        assertEquals("INACTIVO", result.getContent().get(0).getEstadoSocio());
+        verify(socioRepository).findAllInactiveWithUser(eq(pageable));
     }
 }
