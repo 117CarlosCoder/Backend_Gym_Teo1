@@ -1,8 +1,10 @@
 package com.example.backendgymteo1.mapper;
 
+import com.example.backendgymteo1.dto.membresia.CreatePlanMembresiaDto;
 import com.example.backendgymteo1.dto.membresia.EstadoMembresiaResponseDto;
 import com.example.backendgymteo1.dto.membresia.MembresiaResponseDto;
 import com.example.backendgymteo1.dto.membresia.PlanMembresiaResponseDto;
+import com.example.backendgymteo1.dto.membresia.UpdatePlanMembresiaDto;
 import com.example.backendgymteo1.dto.socio.MembresiaResumenDto;
 import com.example.backendgymteo1.dto.sucursal.SucursalResponseDto;
 import com.example.backendgymteo1.entity.EstadoMembresia;
@@ -117,6 +119,36 @@ public class MembresiaMapper {
                 .precio(plan.getPrecio())
                 .descripcion(plan.getDescripcion())
                 .build();
+    }
+
+    public PlanMembresia toPlanEntity(CreatePlanMembresiaDto dto) {
+        if (dto == null) {
+            return null;
+        }
+        return PlanMembresia.builder()
+                .nombre(dto.getNombre().trim())
+                .duracion(dto.getDuracion())
+                .precio(dto.getPrecio())
+                .descripcion(dto.getDescripcion())
+                .build();
+    }
+
+    public void updatePlanEntity(PlanMembresia plan, UpdatePlanMembresiaDto dto) {
+        if (plan == null || dto == null) {
+            return;
+        }
+        if (dto.getNombre() != null && !dto.getNombre().isBlank()) {
+            plan.setNombre(dto.getNombre().trim());
+        }
+        if (dto.getDuracion() != null) {
+            plan.setDuracion(dto.getDuracion());
+        }
+        if (dto.getPrecio() != null) {
+            plan.setPrecio(dto.getPrecio());
+        }
+        if (dto.getDescripcion() != null) {
+            plan.setDescripcion(dto.getDescripcion());
+        }
     }
 
     public EstadoMembresiaResponseDto toEstadoDto(EstadoMembresia estado) {

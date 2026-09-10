@@ -31,6 +31,7 @@ public class SwaggerConfig {
             "Roles",
             "Usuarios",
             "Socios",
+            "Planes de Membresía",
             "Membresías"
     );
 
@@ -52,6 +53,7 @@ public class SwaggerConfig {
                         new Tag().name("Roles").description("Consulta del catálogo de roles del gimnasio"),
                         new Tag().name("Usuarios").description("Gestión integral de usuarios y perfiles"),
                         new Tag().name("Socios").description("Operaciones de administración y consulta de socios del gimnasio"),
+                        new Tag().name("Planes de Membresía").description("Operaciones CRUD para la consulta, creación, actualización y eliminación de planes y tarifas del gimnasio"),
                         new Tag().name("Membresías").description("Operaciones para la emisión, consulta y gestión de membresías de socios")
                 ))
                 .addSecurityItem(new SecurityRequirement().addList(SECURITY_SCHEME_NAME))

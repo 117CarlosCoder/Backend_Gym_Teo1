@@ -12,6 +12,7 @@ import org.springframework.stereotype.Repository;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 @Repository
 public interface MembresiaRepository extends JpaRepository<Membresia, Integer> {
@@ -115,4 +116,10 @@ public interface MembresiaRepository extends JpaRepository<Membresia, Integer> {
             @Param("socioId") Integer socioId,
             @Param("fechaActual") LocalDate fechaActualmembresia_sucursal
     );
+
+    boolean existsByPlanId(Integer planId);
+
+    @Query("SELECT DISTINCT m.socio.id FROM Membresia m WHERE m.estadoMembresia.id = 1 AND m.fechaVencimiento >= :fechaActual")
+    Set<Integer> findSocioIdsWithActiveMembresia(@Param("fechaActual") LocalDate fechaActual);
 }
+
