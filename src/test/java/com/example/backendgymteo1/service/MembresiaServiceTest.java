@@ -168,7 +168,7 @@ class MembresiaServiceTest {
         when(socioRepository.findByIdAndActiveWithUser(4)).thenReturn(Optional.of(socioEntity));
         when(planMembresiaRepository.findById(1)).thenReturn(Optional.of(planMensual));
         when(estadoMembresiaRepository.findById(1)).thenReturn(Optional.of(estadoActiva));
-        when(membresiaRepository.existsActiveBySocio(eq(4), eq(1), any())).thenReturn(false);
+        when(membresiaRepository.findActiveMembershipsBySocio(eq(4), eq(1), any())).thenReturn(List.of());
         when(sucursalRepository.findById(1)).thenReturn(Optional.of(sucursalCentral));
         when(sucursalRepository.findById(2)).thenReturn(Optional.of(sucursalNorte));
         when(membresiaRepository.save(any(Membresia.class))).thenReturn(membresiaEntity);
@@ -258,5 +258,49 @@ class MembresiaServiceTest {
                 eq(true),
                 eq(new BigDecimal("125.00"))
         );
+    }
+
+    @Test
+    @DisplayName("Crear membresía cuando el socio ya tiene membresía activa cancela la previa y activa la nueva")
+    void testCreateMembresia_CambioDePlan_CancelaMembresiaPrevia() {
+        CreateMembresiaDto request = CreateMembresiaDto.builder()
+                .idSocio(4)
+                .idPlan(2)
+                .sucursalIds(List.of(1))
+                .fechaInicio(LocalDate.now())
+                .build();
+
+        Membresia membresiaPrevia = Membresia.builder()
+                .id(10)
+                .socio(socioEntity)
+                .plan(planMensual)
+                .estadoMembresia(estadoActiva)
+                .fechaInicio(LocalDate.now().minusDays(10))
+                .fechaVencimiento(LocalDate.now().plusDays(20))
+                .build();
+
+        when(socioRepository.findByIdAndActiveWithUser(4)).thenReturn(Optional.of(socioEntity));
+        when(planMembresiaRepository.findById(2)).thenReturn(Optional.of(planTrimestral));
+        when(estadoMembresiaRepository.findById(1)).thenReturn(Optional.of(estadoActiva));
+        when(membresiaRepository.findActiveMembershipsBySocio(eq(4), eq(1), any())).thenReturn(List.of(membresiaPrevia));
+        when(estadoMembresiaRepository.findById(4)).thenReturn(Optional.of(estadoCancelada));
+        when(sucursalRepository.findById(1)).thenReturn(Optional.of(sucursalCentral));
+        when(membresiaRepository.save(any(Membresia.class))).thenReturn(membresiaEntity);
+
+        MembresiaResponseDto expectedDto = MembresiaResponseDto.builder()
+                .id(51)
+                .activa(true)
+                .build();
+        when(membresiaMapper.toDto(any(Membresia.class))).thenReturn(expectedDto);
+
+        MembresiaResponseDto result = membresiaService.create(request, adminUser);
+
+        assertNotNull(result);
+        assertEquals(51, result.getId());
+        verify(membresiaRepository).save(membresiaPrevia);
+        assertEquals(4, membresiaPrevia.getEstadoMembresia().getId());
+        assertEquals("CANCELADA", membresiaPrevia.getEstadoMembresia().getNombre());
+        verify(auditoriaService).registrar(eq(adminUser), eq("membresia"), eq("CANCEL"), eq(10), anyString());
+        verify(auditoriaService).registrar(eq(adminUser), eq("membresia"), eq("INSERT"), any(), anyString());
     }
 }
