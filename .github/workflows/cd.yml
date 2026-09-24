@@ -22,3 +22,4 @@ jobs:
             cd ~/app/Backend_Gym_Teo1 && git pull
             cd ~/app/Frontend_Gym_Teo1 && git pull
             docker compose up --build -d
+            command_timeout: 30m
