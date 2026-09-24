@@ -82,7 +82,7 @@ class AsistenciaControllerTest {
     }
 
     @Test
-    @DisplayName("POST /asistencias con snake_case registra entrada exitosamente y retorna 201")
+    @DisplayName("POST /asistencias/registro con snake_case registra entrada exitosamente y retorna 201")
     void testRegistrarEntrada_Success() throws Exception {
         RegistroAsistenciaResponseDto responseDto = RegistroAsistenciaResponseDto.builder()
                 .mensaje("Asistencia registrada exitosamente")
@@ -107,7 +107,7 @@ class AsistenciaControllerTest {
 
         String jsonBody = "{\"id_socio\": 4, \"sucursal_id\": 1}";
 
-        mockMvc.perform(post("/asistencias")
+        mockMvc.perform(post("/asistencias/registro")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(jsonBody))
                 .andExpect(status().isCreated())
@@ -120,7 +120,7 @@ class AsistenciaControllerTest {
     }
 
     @Test
-    @DisplayName("POST /asistencias/entrada con camelCase registra entrada exitosamente y retorna 201")
+    @DisplayName("POST /asistencias/registro con camelCase registra entrada exitosamente y retorna 201")
     void testRegistrarEntrada_AliasEndpoint_Success() throws Exception {
         RegistroAsistenciaResponseDto responseDto = RegistroAsistenciaResponseDto.builder()
                 .mensaje("Asistencia registrada exitosamente")
@@ -139,7 +139,7 @@ class AsistenciaControllerTest {
 
         String jsonBody = "{\"idSocio\": 5, \"sucursalId\": 1}";
 
-        mockMvc.perform(post("/asistencias/entrada")
+        mockMvc.perform(post("/asistencias/registro")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(jsonBody))
                 .andExpect(status().isCreated())
@@ -148,11 +148,11 @@ class AsistenciaControllerTest {
     }
 
     @Test
-    @DisplayName("POST /asistencias con datos vacíos o nulos retorna 400 Bad Request")
+    @DisplayName("POST /asistencias/registro con datos vacíos o nulos retorna 400 Bad Request")
     void testRegistrarEntrada_ValidationFailure() throws Exception {
         String invalidJson = "{}";
 
-        mockMvc.perform(post("/asistencias")
+        mockMvc.perform(post("/asistencias/registro")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(invalidJson))
                 .andExpect(status().isBadRequest());

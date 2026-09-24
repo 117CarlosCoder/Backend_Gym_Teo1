@@ -89,9 +89,12 @@ public class AsistenciaService {
             }
         }
 
-        // 4.obtener recepcionista
-        Recepcionista recepcionista = recepcionistaRepository.findById(usuarioAutenticado.getId()).orElseThrow(
-                () -> new RuntimeException("Recepcionisto no encontrado"));
+        // 4.obtener recepcionista (si el usuario autenticado aun no tiene perfil, se crea)
+        Recepcionista recepcionista = recepcionistaRepository.findById(usuarioAutenticado.getId())
+                .orElseGet(() -> recepcionistaRepository.save(Recepcionista.builder()
+                        .usuario(usuarioAutenticado)
+                        .fechaContratacion(LocalDate.now())
+                        .build()));
 
         // 5. registro
         LocalTime horaEntrada = LocalTime.now();
