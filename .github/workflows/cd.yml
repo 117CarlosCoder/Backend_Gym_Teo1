@@ -16,13 +16,18 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write 
+      packages: write
+    outputs:
+      image: ${{ steps.vars.outputs.image }}
     steps:
       - name: Checkout del código
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
-      - name: Convertir nombre de usuario a minúsculas
-        run: echo "OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> ${GITHUB_ENV}
+      - name: Nombre de la imagen (en minúsculas)
+        id: vars
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/backend-gym:latest" >> "$GITHUB_OUTPUT"
 
       - name: Iniciar sesión en GitHub Container Registry
         uses: docker/login-action@v3
@@ -37,10 +42,10 @@ jobs:
       - name: Compilar y subir imagen
         uses: docker/build-push-action@v5
         with:
-          context: . 
+          context: .
           file: ./Dockerfile
           push: true
-          tags: ghcr.io/${{ env.OWNER_LC }}/backend-gym:latest
+          tags: ${{ steps.vars.outputs.image }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -50,35 +55,39 @@ jobs:
     steps:
       - name: Deploy to EC2 via SSH
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          IMAGE: ${{ needs.build-and-push.outputs.image }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           command_timeout: 30m
+          envs: IMAGE
           script: |
             set -e
 
-            exec 9>/tmp/gym-backend-deploy.lock
+            exec 9>/tmp/gym-deploy.lock
             flock 9
 
-            # Asegurar Swap por protección general del sistema
-            if ! swapon --show | grep -q /swapfile; then
-              sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile || echo "AVISO: no se pudo activar el swap"
-              grep -q '^/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+            docker builder prune -af
+            if [ -f /swapfile ]; then
+              sudo swapoff /swapfile || true
+              sudo rm -f /swapfile
+              sudo sed -i '/^\/swapfile/d' /etc/fstab
             fi
+            df -h /
 
-            # Ir a la carpeta del backend en la EC2 y actualizar el docker-compose.yml
-            cd ~/app/Backend_Gym_Teo1
-            git pull
+            docker pull "$IMAGE"
 
-            # Autenticar Docker en la EC2 con GitHub Packages usando el token de la acción
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker tag "$IMAGE" gym-system-backend:latest
 
-            # Descargar la imagen ya compilada (Tu EC2 no consume recursos aquí)
-            docker compose pull app
+            cd ~/app/Frontend_Gym_Teo1
+            git pull --ff-only || echo "AVISO: no se pudo actualizar el repo del Frontend"
 
-            # Levantar el contenedor actualizado de forma instantánea
-            docker compose up -d app
+            docker compose up -d --no-build db
+            docker compose up -d --no-build --no-deps --force-recreate backend
 
-            # Limpiar imágenes antiguas del backend para ahorrar espacio en disco
-            docker image prune -af
+            docker compose up -d --no-build --no-deps --force-recreate frontend || echo "AVISO: no se pudo levantar el frontend"
+
+            docker image prune -f
+            docker ps
