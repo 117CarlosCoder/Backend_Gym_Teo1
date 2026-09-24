@@ -5,6 +5,9 @@ on:
     workflows: ["CI"]
     types: [completed]
     branches: [main]
+concurrency:
+  group: deploy-ec2
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -17,9 +20,20 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 30m
           script: |
             set -e
+
+            exec 9>/tmp/gym-deploy.lock
+            flock 9
+
+            if ! swapon --show | grep -q /swapfile; then
+              sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile || echo "AVISO: no se pudo activar el swap"
+              grep -q '^/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+            fi
+
             cd ~/app/Backend_Gym_Teo1 && git pull
             cd ~/app/Frontend_Gym_Teo1 && git pull
             docker compose up --build -d
-            command_timeout: 30m
+
+            docker image prune -f
