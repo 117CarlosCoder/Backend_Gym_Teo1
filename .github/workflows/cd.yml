@@ -84,6 +84,17 @@ jobs:
             cd ~/app/Frontend_Gym_Teo1
             git pull --ff-only || echo "AVISO: no se pudo actualizar el repo del Frontend"
 
+            docker ps -aq --filter label=com.docker.compose.project=backend_gym_teo1 | xargs -r docker rm -f
+            for c in gym_db gym_backend gym_frontend; do
+              if docker inspect "$c" >/dev/null 2>&1; then
+                p=$(docker inspect -f '{{ index .Config.Labels "com.docker.compose.project" }}' "$c" 2>/dev/null || true)
+                if [ "$p" != "gym-system" ]; then
+                  echo "Quitando $c (proyecto: '$p', volúmenes: $(docker inspect -f '{{range .Mounts}}{{.Name}} {{end}}' "$c"))"
+                  docker rm -f "$c"
+                fi
+              fi
+            done
+
             docker compose up -d --no-build db
             docker compose up -d --no-build --no-deps --force-recreate backend
 
