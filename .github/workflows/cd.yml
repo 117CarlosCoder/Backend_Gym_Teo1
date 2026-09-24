@@ -5,16 +5,42 @@ on:
     workflows: ["CI"]
     types: [completed]
     branches: [main]
+
 concurrency:
   group: deploy-ec2
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  build-and-push:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to EC2
+      - name: Checkout del código
+        uses: actions/checkout@v4
+
+      - name: Iniciar sesión en Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Configurar Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compilar y subir imagen del Backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./Backend_Gym_Teo1  
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/backend-gym:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to EC2 via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -27,13 +53,21 @@ jobs:
             exec 9>/tmp/gym-deploy.lock
             flock 9
 
+            # Mantener el Swap por seguridad
             if ! swapon --show | grep -q /swapfile; then
               sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile || echo "AVISO: no se pudo activar el swap"
               grep -q '^/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
             fi
 
+            # Actualizar archivos de configuración (como docker-compose.yml si cambió)
             cd ~/app/Backend_Gym_Teo1 && git pull
             cd ~/app/Frontend_Gym_Teo1 && git pull
-            docker compose up --build -d
 
-            docker image prune -f
+            # Descargar la nueva imagen ya compilada (EC2 no hace esfuerzo aquí)
+            docker compose pull backend
+
+            # Levantar los contenedores (esto es instantáneo y no consume CPU)
+            docker compose up -d
+
+            # Limpiar imágenes antiguas para no llenar el disco de la EC2
+            docker image prune -af
