@@ -76,9 +76,30 @@ public class MembresiaService {
         LocalDate fechaInicio = request.getFechaInicio() != null ? request.getFechaInicio() : LocalDate.now();
 
         if (estado.getId() == 1 || "ACTIVA".equalsIgnoreCase(estado.getNombre())) {
-            boolean yaTieneActiva = membresiaRepository.existsActiveBySocio(socio.getId(), estado.getId(), fechaInicio);
-            if (yaTieneActiva) {
-                throw new RuntimeException("El socio ya cuenta con una membresía activa vigente.");
+            List<Membresia> membresiasActivas = membresiaRepository.findActiveMembershipsBySocio(socio.getId(), estado.getId(), fechaInicio);
+            if (!membresiasActivas.isEmpty()) {
+                EstadoMembresia estadoCancelada = estadoMembresiaRepository.findById(4)
+                        .orElseGet(() -> estadoMembresiaRepository.findByNombreIgnoreCase("CANCELADA")
+                                .orElseThrow(() -> new ResourceNotFoundException("Estado 'CANCELADA' no encontrado en el catálogo")));
+
+                for (Membresia previa : membresiasActivas) {
+                    previa.setEstadoMembresia(estadoCancelada);
+                    previa.setFechaCancelacion(LocalDateTime.now());
+                    previa.setUsuarioCancelo(usuarioActual);
+                    previa.setMotivoCancelacion(String.format("Cambio de plan a '%s'", plan.getNombre()));
+                    previa.setComentariosCancelacion(String.format("Membresía cancelada automáticamente por cambio de plan de '%s' a '%s'",
+                            previa.getPlan() != null ? previa.getPlan().getNombre() : "Plan previo", plan.getNombre()));
+                    membresiaRepository.save(previa);
+
+                    auditoriaService.registrar(
+                            usuarioActual,
+                            "membresia",
+                            "CANCEL",
+                            previa.getId(),
+                            String.format("Cancelación automática de membresía ID %d por cambio a nuevo Plan '%s'",
+                                    previa.getId(), plan.getNombre())
+                    );
+                }
             }
         }
 

@@ -114,7 +114,21 @@ public interface MembresiaRepository extends JpaRepository<Membresia, Integer> {
             "ORDER BY m.fechaVencimiento DESC")
     Optional<Membresia> findActiveBySocioId(
             @Param("socioId") Integer socioId,
-            @Param("fechaActual") LocalDate fechaActualmembresia_sucursal
+            @Param("fechaActual") LocalDate fechaActual
+    );
+
+    @Query("SELECT DISTINCT m FROM Membresia m " +
+            "JOIN FETCH m.socio s " +
+            "JOIN FETCH m.plan p " +
+            "JOIN FETCH m.estadoMembresia e " +
+            "LEFT JOIN FETCH m.sucursales " +
+            "WHERE s.id = :socioId " +
+            "AND e.id = :estadoId " +
+            "AND m.fechaVencimiento >= :fechaActual")
+    List<Membresia> findActiveMembershipsBySocio(
+            @Param("socioId") Integer socioId,
+            @Param("estadoId") Integer estadoId,
+            @Param("fechaActual") LocalDate fechaActual
     );
 
     boolean existsByPlanId(Integer planId);
