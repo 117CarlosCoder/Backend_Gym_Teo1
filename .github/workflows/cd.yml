@@ -70,17 +70,14 @@ jobs:
           script: |
             set -e
 
-            # Un deploy a la vez en el servidor
             exec 9>/tmp/gym-deploy.lock
             flock 9
 
-            # Descargar la imagen compilada en GitHub (la EC2 no compila nada)
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             docker pull "$IMAGE"
             docker logout ghcr.io
             docker tag "$IMAGE" gym-system-backend:latest
 
-            # El compose que corre en el servidor está en el repo del Frontend
             cd ~/app/Frontend_Gym_Teo1
             git pull --ff-only || echo "AVISO: no se pudo actualizar el repo"
 
