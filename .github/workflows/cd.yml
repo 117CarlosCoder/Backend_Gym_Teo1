@@ -52,53 +52,42 @@ jobs:
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
+    permissions:
+      packages: read
     steps:
       - name: Deploy to EC2 via SSH
         uses: appleboy/ssh-action@v1.0.3
         env:
           IMAGE: ${{ needs.build-and-push.outputs.image }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           command_timeout: 30m
-          envs: IMAGE
+          envs: IMAGE,GHCR_USER,GHCR_TOKEN
           script: |
             set -e
 
+            # Un deploy a la vez en el servidor
             exec 9>/tmp/gym-deploy.lock
             flock 9
 
-            docker builder prune -af
-            if [ -f /swapfile ]; then
-              sudo swapoff /swapfile || true
-              sudo rm -f /swapfile
-              sudo sed -i '/^\/swapfile/d' /etc/fstab
-            fi
-            df -h /
-
+            # Descargar la imagen compilada en GitHub (la EC2 no compila nada)
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             docker pull "$IMAGE"
-
+            docker logout ghcr.io
             docker tag "$IMAGE" gym-system-backend:latest
 
+            # El compose que corre en el servidor está en el repo del Frontend
             cd ~/app/Frontend_Gym_Teo1
-            git pull --ff-only || echo "AVISO: no se pudo actualizar el repo del Frontend"
-
-            docker ps -aq --filter label=com.docker.compose.project=backend_gym_teo1 | xargs -r docker rm -f
-            for c in gym_db gym_backend gym_frontend; do
-              if docker inspect "$c" >/dev/null 2>&1; then
-                p=$(docker inspect -f '{{ index .Config.Labels "com.docker.compose.project" }}' "$c" 2>/dev/null || true)
-                if [ "$p" != "gym-system" ]; then
-                  echo "Quitando $c (proyecto: '$p', volúmenes: $(docker inspect -f '{{range .Mounts}}{{.Name}} {{end}}' "$c"))"
-                  docker rm -f "$c"
-                fi
-              fi
-            done
+            git pull --ff-only || echo "AVISO: no se pudo actualizar el repo"
 
             docker compose up -d --no-build db
             docker compose up -d --no-build --no-deps --force-recreate backend
-
-            docker compose up -d --no-build --no-deps --force-recreate frontend || echo "AVISO: no se pudo levantar el frontend"
+            # nginx guarda la IP del backend al arrancar: reiniciarlo para que encuentre el nuevo
+            docker compose restart frontend
 
             docker image prune -f
             docker ps
