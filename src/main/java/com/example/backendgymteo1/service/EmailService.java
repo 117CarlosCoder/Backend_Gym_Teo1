@@ -4,9 +4,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.util.HtmlUtils;
 
+import java.time.Duration;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -23,9 +27,15 @@ public class EmailService {
             @Value("${resend.from:${RESEND_FROM:Gimnasio <onboarding@resend.dev>}}") String fromEmail) {
         this.apiKey = apiKey;
         this.fromEmail = fromEmail;
+
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofSeconds(10));
+        requestFactory.setReadTimeout(Duration.ofSeconds(15));
+
         this.restClient = RestClient.builder()
+                .requestFactory(requestFactory)
                 .baseUrl("https://api.resend.com")
-                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
+                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + (apiKey != null ? apiKey : ""))
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .build();
     }
@@ -117,17 +127,30 @@ public class EmailService {
         enviarCorreo(destinatario, "Notificación de Cancelación de Membresía - Gimnasio", htmlContent);
     }
 
-    public void enviarRecordatorioVencimiento(
+    public String enviarRecordatorioVencimiento(
             String destinatario,
             String nombreSocio,
             String nombrePlan,
-            java.time.LocalDate fechaVencimiento,
+            LocalDate fechaVencimiento,
             long diasRestantes) {
+        return enviarRecordatorioVencimiento(destinatario, nombreSocio, nombrePlan, fechaVencimiento, diasRestantes, null);
+    }
+
+    public String enviarRecordatorioVencimiento(
+            String destinatario,
+            String nombreSocio,
+            String nombrePlan,
+            LocalDate fechaVencimiento,
+            long diasRestantes,
+            String idempotencyKey) {
+
         if (apiKey == null || apiKey.isBlank()) {
-            log.warn("Resend API Key no configurada. Recordatorio de vencimiento para {}: [Plan: {}, Vence: {}, Días restantes: {}]",
-                    destinatario, nombrePlan, fechaVencimiento, diasRestantes);
-            return;
+            log.warn("Resend API Key no configurada. Intento de enviar recordatorio a {} omitido", destinatario);
+            throw new IllegalStateException("API Key de Resend no configurada. El proveedor no aceptó el correo.");
         }
+
+        String nombreEscapado = HtmlUtils.htmlEscape(nombreSocio != null ? nombreSocio : "Estimado(a) socio(a)");
+        String planEscapado = HtmlUtils.htmlEscape(nombrePlan != null ? nombrePlan : "Plan del gimnasio");
 
         String htmlContent = String.format("""
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
@@ -138,13 +161,44 @@ public class EmailService {
                     <p style="margin: 5px 0; font-size: 14px;"><strong>Fecha de vencimiento:</strong> %s</p>
                     <p style="margin: 5px 0; font-size: 14px;"><strong>Días restantes:</strong> <code style="background: #fdebd0; padding: 3px 6px; border-radius: 4px; font-size: 15px; font-weight: bold; color: #d35400;">%d día(s)</code></p>
                 </div>
-                <p style="font-size: 13px; color: #7f8c8d;">Le invitamos a realizar su pago en recepción para renovar su membresía a tiempo y continuar disfrutando de nuestras instalaciones y servicios sin interrupción.</p>
+                <p style="font-size: 13px; color: #7f8c8d;">Le invitamos a realizar su renovación en recepción a tiempo para continuar disfrutando de nuestras instalaciones y servicios sin interrupción.</p>
                 <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
                 <p style="font-size: 12px; color: #95a5a6; text-align: center;">Administración del Gimnasio &copy; 2026</p>
             </div>
-            """, nombreSocio, nombrePlan, fechaVencimiento, diasRestantes);
+            """, nombreEscapado, planEscapado, fechaVencimiento, diasRestantes);
 
-        enviarCorreo(destinatario, "Recordatorio de Vencimiento de Membresía - Gimnasio", htmlContent);
+        try {
+            Map<String, Object> payload = Map.of(
+                    "from", fromEmail,
+                    "to", List.of(destinatario),
+                    "subject", "Recordatorio de Vencimiento de Membresía - Gimnasio",
+                    "html", htmlContent
+            );
+
+            var requestSpec = restClient.post()
+                    .uri("/emails");
+
+            if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+                requestSpec.header("Idempotency-Key", idempotencyKey);
+            }
+
+            Map<?, ?> response = requestSpec
+                    .body(payload)
+                    .retrieve()
+                    .body(Map.class);
+
+            Object idObj = (response != null) ? response.get("id") : null;
+            if (!(idObj instanceof String idStr) || idStr.trim().isEmpty()) {
+                throw new IllegalStateException("El proveedor Resend no retornó un ID de mensaje válido (ID no es cadena de texto o está vacío).");
+            }
+
+            String messageId = idStr.trim();
+            log.info("Recordatorio enviado exitosamente vía Resend a {} (ID: {})", destinatario, messageId);
+            return messageId;
+        } catch (Exception e) {
+            log.error("No se pudo enviar el recordatorio vía Resend a {}: {}", destinatario, e.getMessage());
+            throw e;
+        }
     }
 }
 

@@ -62,7 +62,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleRuntimeException(RuntimeException ex) {
         Map<String, String> error = new HashMap<>();
         error.put("error", "Error en la solicitud");
-        error.put("message", ex.getMessage());
+        String message = ex.getMessage();
+        if (message == null || message.toLowerCase().contains("sql") || message.toLowerCase().contains("table")
+                || message.toLowerCase().contains("record has changed") || message.toLowerCase().contains("mariadb")) {
+            message = "Ocurrió un error al procesar la solicitud.";
+        }
+        error.put("message", message);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
     }
 }
