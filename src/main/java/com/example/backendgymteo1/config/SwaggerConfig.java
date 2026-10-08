@@ -32,7 +32,9 @@ public class SwaggerConfig {
             "Usuarios",
             "Socios",
             "Planes de Membresía",
-            "Membresías"
+            "Membresías",
+            "Asistencias",
+            "Notificaciones"
     );
 
     @Bean
@@ -51,10 +53,12 @@ public class SwaggerConfig {
                 .tags(List.of(
                         new Tag().name("Autenticación").description("Endpoints para registro, inicio y cierre de sesión en el gimnasio"),
                         new Tag().name("Roles").description("Consulta del catálogo de roles del gimnasio"),
-                        new Tag().name("Usuarios").description("Gestión integral de usuarios y perfiles"),
+                        new Tag().name("Usuarios").description("Operaciones de administración y consulta de usuarios del gimnasio"),
                         new Tag().name("Socios").description("Operaciones de administración y consulta de socios del gimnasio"),
                         new Tag().name("Planes de Membresía").description("Operaciones CRUD para la consulta, creación, actualización y eliminación de planes y tarifas del gimnasio"),
-                        new Tag().name("Membresías").description("Operaciones para la emisión, consulta y gestión de membresías de socios")
+                        new Tag().name("Membresías").description("Operaciones para la emisión, consulta y gestión de membresías multisucursal"),
+                        new Tag().name("Asistencias").description("Operaciones de control y registro de asistencia al gimnasio"),
+                        new Tag().name("Notificaciones").description("Endpoints para la bandeja de notificaciones persistente del cliente autenticado")
                 ))
                 .addSecurityItem(new SecurityRequirement().addList(SECURITY_SCHEME_NAME))
                 .components(new Components()
