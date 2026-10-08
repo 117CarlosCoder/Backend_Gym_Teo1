@@ -4,6 +4,7 @@ import com.example.backendgymteo1.config.security.CurrentUser;
 import com.example.backendgymteo1.dto.pago.CreatePagoDto;
 import com.example.backendgymteo1.dto.pago.MetodoPagoResponseDto;
 import com.example.backendgymteo1.dto.pago.PagoResponseDto;
+import com.example.backendgymteo1.entity.Rol;
 import com.example.backendgymteo1.entity.User;
 import com.example.backendgymteo1.service.PagoService;
 import com.example.backendgymteo1.service.PdfComprobanteService;
@@ -23,6 +24,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -71,7 +73,9 @@ public class PagoController {
     @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA', 'CLIENTE')")
     public ResponseEntity<Page<PagoResponseDto>> obtenerHistorialPagosPorSocio(
             @PathVariable Integer socioId,
-            @PageableDefault(size = 10, sort = "fechaPago") Pageable pageable) {
+            @PageableDefault(size = 10, sort = "fechaPago") Pageable pageable,
+            @CurrentUser User currentUser) {
+        verificarAccesoSocio(socioId, currentUser);
         return ResponseEntity.ok(pagoService.obtenerHistorialPagosPorSocio(socioId, pageable));
     }
 
@@ -84,8 +88,10 @@ public class PagoController {
     })
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA', 'CLIENTE')")
-    public ResponseEntity<PagoResponseDto> obtenerPagoPorId(@PathVariable Integer id) {
-        return ResponseEntity.ok(pagoService.obtenerPagoPorId(id));
+    public ResponseEntity<PagoResponseDto> obtenerPagoPorId(@PathVariable Integer id, @CurrentUser User currentUser) {
+        PagoResponseDto pago = pagoService.obtenerPagoPorId(id);
+        verificarAccesoSocio(pago.getIdSocio(), currentUser);
+        return ResponseEntity.ok(pago);
     }
 
     @Operation(summary = "Descargar comprobante de pago en formato PDF", description = "Genera y descarga el archivo PDF oficial con el diseño del comprobante de pago.")
@@ -97,8 +103,9 @@ public class PagoController {
     })
     @GetMapping(value = "/{id}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
     @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA', 'CLIENTE')")
-    public ResponseEntity<byte[]> descargarComprobantePdf(@PathVariable Integer id) {
+    public ResponseEntity<byte[]> descargarComprobantePdf(@PathVariable Integer id, @CurrentUser User currentUser) {
         PagoResponseDto pago = pagoService.obtenerPagoPorId(id);
+        verificarAccesoSocio(pago.getIdSocio(), currentUser);
         byte[] pdfBytes = pdfComprobanteService.generarComprobantePdf(pago);
 
         HttpHeaders headers = new HttpHeaders();
@@ -120,5 +127,13 @@ public class PagoController {
     @GetMapping("/metodos-pago")
     public ResponseEntity<List<MetodoPagoResponseDto>> listarMetodosPago() {
         return ResponseEntity.ok(pagoService.listarMetodosPago());
+    }
+
+    /** Un CLIENTE solo puede ver sus propios pagos (su ID de socio es el mismo que su ID de usuario). */
+    private void verificarAccesoSocio(Integer idSocio, User currentUser) {
+        boolean esCliente = currentUser.getRol() != null && Rol.CLIENTE.equalsIgnoreCase(currentUser.getRol().getNombre());
+        if (esCliente && !currentUser.getId().equals(idSocio)) {
+            throw new AccessDeniedException("No tienes permiso para ver los pagos de otro socio.");
+        }
     }
 }
