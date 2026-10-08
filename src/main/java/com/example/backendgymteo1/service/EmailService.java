@@ -131,14 +131,14 @@ public class EmailService {
 
         String htmlContent = String.format("""
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
-                <h2 style="color: #e67e22; text-align: center;">Recordatorio: Tu Membresía está Próxima a Vencer</h2>
+                <h2 style="color: #d35400; text-align: center;">Recordatorio de Vencimiento de Membresía</h2>
                 <p style="font-size: 16px; color: #333;">Estimado(a) <strong>%s</strong>,</p>
-                <p style="font-size: 14px; color: #555;">Le recordamos que su membresía correspondiente al plan <strong>%s</strong> está próxima a vencer.</p>
-                <div style="background-color: #fef5e7; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #f39c12;">
-                    <p style="margin: 5px 0; font-size: 14px;"><strong>Fecha de Vencimiento:</strong> %s</p>
-                    <p style="margin: 5px 0; font-size: 14px;"><strong>Días Restantes:</strong> <strong style="color: #d35400;">%d días</strong></p>
+                <p style="font-size: 14px; color: #555;">Le recordamos que su membresía correspondiente al plan <strong style="color: #2980b9;">%s</strong> está próxima a vencer.</p>
+                <div style="background-color: #fef5e7; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #e67e22;">
+                    <p style="margin: 5px 0; font-size: 14px;"><strong>Fecha de vencimiento:</strong> %s</p>
+                    <p style="margin: 5px 0; font-size: 14px;"><strong>Días restantes:</strong> <code style="background: #fdebd0; padding: 3px 6px; border-radius: 4px; font-size: 15px; font-weight: bold; color: #d35400;">%d día(s)</code></p>
                 </div>
-                <p style="font-size: 13px; color: #7f8c8d;">Le invitamos a renovar su membresía a tiempo para continuar disfrutando de todas nuestras instalaciones y beneficios sin interrupciones.</p>
+                <p style="font-size: 13px; color: #7f8c8d;">Le invitamos a realizar su pago en recepción para renovar su membresía a tiempo y continuar disfrutando de nuestras instalaciones y servicios sin interrupción.</p>
                 <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
                 <p style="font-size: 12px; color: #95a5a6; text-align: center;">Administración del Gimnasio &copy; 2026</p>
             </div>
@@ -147,4 +147,5 @@ public class EmailService {
         enviarCorreo(destinatario, "Recordatorio de Vencimiento de Membresía - Gimnasio", htmlContent);
     }
 }
+
 

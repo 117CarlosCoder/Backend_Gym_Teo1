@@ -28,9 +28,11 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+
 
 @Slf4j
 @Service
@@ -62,6 +64,17 @@ public class PagoService {
 
         MetodoPago metodoPago = metodoPagoRepository.findById(request.getIdMetodoPago())
                 .orElseThrow(() -> new ResourceNotFoundException("Método de pago no encontrado con ID: " + request.getIdMetodoPago()));
+
+        if (metodoPago.getNombre() != null && "EFECTIVO".equalsIgnoreCase(metodoPago.getNombre().trim())) {
+            BigDecimal costoPlan = (membresia.getPlan() != null && membresia.getPlan().getPrecio() != null)
+                    ? membresia.getPlan().getPrecio()
+                    : BigDecimal.ZERO;
+
+            if (request.getMonto() == null || request.getMonto().compareTo(costoPlan) < 0) {
+                throw new RuntimeException(String.format("Disculpe pero su deuda es de Q. %.2f", costoPlan));
+            }
+        }
+
 
         Recepcionista recepcionista = recepcionistaRepository.findById(usuarioActual.getId())
                 .orElseGet(() -> recepcionistaRepository.save(Recepcionista.builder()
@@ -126,9 +139,25 @@ public class PagoService {
     }
 
     public Page<PagoResponseDto> obtenerHistorialPagosPorSocio(Integer socioId, Pageable pageable) {
-        return comprobantePagoRepository.findBySocioIdPaged(socioId, pageable)
+        Pageable sanitizedPageable = sanitizePageable(pageable, "fechaPago");
+        return comprobantePagoRepository.findBySocioIdPaged(socioId, sanitizedPageable)
                 .map(pagoMapper::toPagoDto);
     }
+
+    private Pageable sanitizePageable(Pageable pageable, String defaultSortProperty) {
+        if (pageable == null) {
+            return org.springframework.data.domain.PageRequest.of(0, 10, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, defaultSortProperty));
+        }
+        org.springframework.data.domain.Sort sort = pageable.getSort();
+        boolean hasInvalidSort = sort.stream().anyMatch(order ->
+                "string".equalsIgnoreCase(order.getProperty())
+        );
+        if (hasInvalidSort || sort.isUnsorted()) {
+            return org.springframework.data.domain.PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, defaultSortProperty));
+        }
+        return pageable;
+    }
+
 
     public List<PagoResponseDto> obtenerHistorialPagosPorSocio(Integer socioId) {
         List<ComprobantePago> comprobantes = comprobantePagoRepository.findBySocioIdWithDetails(socioId);

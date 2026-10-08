@@ -309,9 +309,28 @@ public class MembresiaService {
         int diasFiltrar = (dias != null && dias > 0) ? dias : 7;
         LocalDate hoy = LocalDate.now();
         LocalDate fechaLimite = hoy.plusDays(diasFiltrar);
-        return membresiaRepository.findProximasAVencerPaged(hoy, fechaLimite, pageable)
+        Pageable sanitizedPageable = sanitizePageable(pageable, "fechaVencimiento");
+        return membresiaRepository.findProximasAVencerPaged(hoy, fechaLimite, sanitizedPageable)
                 .map(membresiaMapper::toDto);
     }
+
+    private Pageable sanitizePageable(Pageable pageable, String defaultSortProperty) {
+        if (pageable == null) {
+            return org.springframework.data.domain.PageRequest.of(0, 10, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.ASC, defaultSortProperty));
+        }
+        org.springframework.data.domain.Sort sort = pageable.getSort();
+        boolean hasInvalidSort = sort.stream().anyMatch(order ->
+                "string".equalsIgnoreCase(order.getProperty()) ||
+                (!order.getProperty().equals("fechaVencimiento") &&
+                 !order.getProperty().equals("fechaInicio") &&
+                 !order.getProperty().equals("id"))
+        );
+        if (hasInvalidSort || sort.isUnsorted()) {
+            return org.springframework.data.domain.PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.ASC, defaultSortProperty));
+        }
+        return pageable;
+    }
+
 
     @Transactional(rollbackFor = Exception.class)
     public void enviarRecordatorioVencimiento(Integer membresiaId, User usuarioActual) {

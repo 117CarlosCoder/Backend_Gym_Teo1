@@ -51,7 +51,7 @@ public class PdfComprobanteService {
             headerCell.setPadding(16);
             headerCell.setHorizontalAlignment(Element.ALIGN_CENTER);
 
-            Paragraph title = new Paragraph("GIMNASIO TEO", fontHeaderTitle);
+            Paragraph title = new Paragraph("CLAUDA LOVERS", fontHeaderTitle);
             title.setAlignment(Element.ALIGN_CENTER);
             headerCell.addElement(title);
 

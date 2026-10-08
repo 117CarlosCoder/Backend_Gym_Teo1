@@ -22,6 +22,8 @@ public interface ComprobantePagoRepository extends JpaRepository<ComprobantePago
             "JOIN FETCH s.usuario u " +
             "JOIN FETCH m.plan p " +
             "JOIN FETCH c.metodoPago mp " +
+            "LEFT JOIN FETCH f.recepcionista r " +
+            "LEFT JOIN FETCH r.usuario ru " +
             "WHERE c.id = :id")
     Optional<ComprobantePago> findByIdWithDetails(@Param("id") Integer id);
 
@@ -32,14 +34,17 @@ public interface ComprobantePagoRepository extends JpaRepository<ComprobantePago
             "JOIN FETCH s.usuario u " +
             "JOIN FETCH m.plan p " +
             "JOIN FETCH c.metodoPago mp " +
+            "LEFT JOIN FETCH f.recepcionista r " +
+            "LEFT JOIN FETCH r.usuario ru " +
             "WHERE s.id = :socioId " +
             "ORDER BY c.fechaPago DESC")
     List<ComprobantePago> findBySocioIdWithDetails(@Param("socioId") Integer socioId);
 
-    @EntityGraph(attributePaths = {"factura", "factura.membresia", "factura.membresia.socio", "factura.membresia.socio.usuario", "factura.membresia.plan", "metodoPago"})
+    @EntityGraph(attributePaths = {"factura", "factura.membresia", "factura.membresia.socio", "factura.membresia.socio.usuario", "factura.membresia.plan", "factura.recepcionista", "factura.recepcionista.usuario", "metodoPago"})
     @Query(value = "SELECT c FROM ComprobantePago c " +
             "WHERE c.factura.membresia.socio.id = :socioId " +
             "ORDER BY c.fechaPago DESC",
             countQuery = "SELECT COUNT(c) FROM ComprobantePago c WHERE c.factura.membresia.socio.id = :socioId")
     Page<ComprobantePago> findBySocioIdPaged(@Param("socioId") Integer socioId, Pageable pageable);
 }
+
