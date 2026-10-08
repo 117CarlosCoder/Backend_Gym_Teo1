@@ -44,150 +44,176 @@ import java.util.List;
 @CrossOrigin(origins = "*")
 public class MembresiaController {
 
-    private final MembresiaService membresiaService;
+        private final MembresiaService membresiaService;
 
-    @Operation(summary = "Crear / Registrar una nueva membresía", description = "Requiere rol ADMIN o RECEPCIONISTA. Recibe socio_id, tipo_membresia_id, sucursal_ids (array para multisucursal) y fecha_inicio. Calcula automáticamente la fecha de vencimiento según la duración del tipo y registra auditoría.")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "201", description = "Membresía creada exitosamente",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = MembresiaResponseDto.class))),
-            @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos o socio con membresía activa vigente", content = @Content),
-            @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
-            @ApiResponse(responseCode = "403", description = "Acceso denegado (Requiere ADMIN o RECEPCIONISTA)", content = @Content),
-            @ApiResponse(responseCode = "404", description = "Socio o Plan no encontrado", content = @Content)
-    })
-    @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
-    public ResponseEntity<MembresiaResponseDto> create(
-            @Valid @RequestBody CreateMembresiaDto request,
-            @CurrentUser User currentUser) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(membresiaService.create(request, currentUser));
-    }
-
-    @Operation(summary = "Listar membresías con filtros avanzados y paginación", description = "Requiere rol ADMIN, RECEPCIONISTA o ENTRENADOR. Filtros disponibles: socio, tipo/plan, sucursal, estado (activa/cancelada/vencida) y fechas.")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Página de membresías obtenida exitosamente"),
-            @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
-            @ApiResponse(responseCode = "403", description = "Acceso denegado", content = @Content)
-    })
-    @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA', 'ENTRENADOR')")
-    public ResponseEntity<Page<MembresiaResponseDto>> findAll(
-            @RequestParam(required = false) Integer socioId,
-            @RequestParam(required = false) Integer planId,
-            @RequestParam(required = false) Integer tipoMembresiaId,
-            @RequestParam(required = false) Integer sucursalId,
-            @RequestParam(required = false) Integer estadoId,
-            @RequestParam(required = false) String estado,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaDesde,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaHasta,
-            @PageableDefault(size = 10, sort = "id") Pageable pageable) {
-
-        Integer effectivePlanId = planId != null ? planId : tipoMembresiaId;
-        return ResponseEntity.ok(membresiaService.findAllPaged(
-                socioId, effectivePlanId, sucursalId, estadoId, estado, fechaDesde, fechaHasta, pageable));
-    }
-
-    @Operation(summary = "Consultar membresías del socio autenticado en sesión (/me)", description = "Retorna el historial completo de membresías del usuario socio autenticado")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Historial de membresías obtenido exitosamente"),
-            @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
-            @ApiResponse(responseCode = "404", description = "El usuario autenticado no tiene perfil de socio", content = @Content)
-    })
-    @GetMapping("/me")
-    public ResponseEntity<List<MembresiaResponseDto>> findMyMembresias(@CurrentUser User currentUser) {
-        return ResponseEntity.ok(membresiaService.findBySocioId(currentUser.getId()));
-    }
-
-    @Operation(summary = "Consultar membresía activa del socio autenticado en sesión (/me/activa)", description = "Retorna la membresía vigente actual del socio que inició sesión")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Membresía activa vigente",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = MembresiaResponseDto.class))),
-            @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
-            @ApiResponse(responseCode = "404", description = "No tiene ninguna membresía activa vigente", content = @Content)
-    })
-    @GetMapping("/me/activa")
-    public ResponseEntity<MembresiaResponseDto> findMyActiveMembresia(@CurrentUser User currentUser) {
-        return ResponseEntity.ok(membresiaService.findActiveBySocioId(currentUser.getId()));
-    }
-
-    @Operation(summary = "Buscar membresía por ID", description = "Requiere rol ADMIN, RECEPCIONISTA o ENTRENADOR")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Membresía encontrada",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = MembresiaResponseDto.class))),
-            @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
-            @ApiResponse(responseCode = "403", description = "Acceso denegado", content = @Content),
-            @ApiResponse(responseCode = "404", description = "Membresía no encontrada", content = @Content)
-    })
-    @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA', 'ENTRENADOR')")
-    public ResponseEntity<MembresiaResponseDto> findById(@PathVariable Integer id) {
-        return ResponseEntity.ok(membresiaService.findById(id));
-    }
-
-    @Operation(summary = "Consultar membresías de un socio por su ID de socio", description = "Requiere rol ADMIN, RECEPCIONISTA o ENTRENADOR")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Historial de membresías del socio",
-                    content = @Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = MembresiaResponseDto.class)))),
-            @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
-            @ApiResponse(responseCode = "403", description = "Acceso denegado", content = @Content),
-            @ApiResponse(responseCode = "404", description = "Socio no encontrado", content = @Content)
-    })
-    @GetMapping("/socio/{socioId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA', 'ENTRENADOR')")
-    public ResponseEntity<List<MembresiaResponseDto>> findBySocioId(@PathVariable Integer socioId) {
-        return ResponseEntity.ok(membresiaService.findBySocioId(socioId));
-    }
-
-    @Operation(summary = "Editar membresía por ID", description = "Permite editar: tipo_membresia_id, sucursal_ids (agregar/quitar) y fecha_vencimiento. Aplica validaciones lógicas. NO permite editar ID, socio ni fecha de creación. Registra evento en auditoría. Requiere ADMIN o RECEPCIONISTA.")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Membresía actualizada exitosamente",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = MembresiaResponseDto.class))),
-            @ApiResponse(responseCode = "400", description = "Validaciones de lógica inválidas (ej. fecha vencimiento anterior a inicio)", content = @Content),
-            @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
-            @ApiResponse(responseCode = "403", description = "Acceso denegado", content = @Content),
-            @ApiResponse(responseCode = "404", description = "Membresía, plan o sucursal no encontrada", content = @Content)
-    })
-    @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
-    public ResponseEntity<MembresiaResponseDto> update(
-            @PathVariable Integer id,
-            @Valid @RequestBody UpdateMembresiaDto request,
-            @CurrentUser User currentUser) {
-        return ResponseEntity.ok(membresiaService.update(id, request, currentUser));
-    }
-
-    @Operation(summary = "Cancelar formalmente una membresía por ID", description = "Requiere rol ADMIN o RECEPCIONISTA. Recibe en body: motivo (dropdown/texto), comentarios, reembolso (true/false) y monto_reembolso (si aplica). Cambia estado a 'CANCELADA', registra fecha_cancelacion, usuario que canceló, auditoría y envía email al socio.")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Membresía cancelada exitosamente y socio notificado por correo",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = MembresiaResponseDto.class))),
-            @ApiResponse(responseCode = "400", description = "Monto de reembolso inválido", content = @Content),
-            @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
-            @ApiResponse(responseCode = "403", description = "Acceso denegado", content = @Content),
-            @ApiResponse(responseCode = "404", description = "Membresía no encontrada", content = @Content)
-    })
-    @PostMapping("/{id}/cancelar")
-    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
-    public ResponseEntity<MembresiaResponseDto> cancelarPost(
-            @PathVariable Integer id,
-            @Valid @RequestBody CancelarMembresiaRequestDto request,
-            @CurrentUser User currentUser) {
-        return ResponseEntity.ok(membresiaService.cancelar(id, request, currentUser));
-    }
-
-    @Operation(summary = "Cancelar membresía vía PATCH (compatibilidad)", description = "Soporta cancelación con body estructurado o parámetro de motivo.")
-    @PatchMapping("/{id}/cancelar")
-    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
-    public ResponseEntity<MembresiaResponseDto> cancelarPatch(
-            @PathVariable Integer id,
-            @RequestBody(required = false) CancelarMembresiaRequestDto request,
-            @RequestParam(required = false) String motivo,
-            @CurrentUser User currentUser) {
-        if (request == null) {
-            request = CancelarMembresiaRequestDto.builder()
-                    .motivo(motivo != null ? motivo : "Cancelación vía PATCH")
-                    .reembolso(false)
-                    .build();
+        @Operation(summary = "Crear / Registrar una nueva membresía", description = "Requiere rol ADMIN o RECEPCIONISTA. Recibe socio_id, tipo_membresia_id, sucursal_ids (array para multisucursal) y fecha_inicio. Calcula automáticamente la fecha de vencimiento según la duración del tipo y registra auditoría.")
+        @ApiResponses(value = {
+                        @ApiResponse(responseCode = "201", description = "Membresía creada exitosamente", content = @Content(mediaType = "application/json", schema = @Schema(implementation = MembresiaResponseDto.class))),
+                        @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos o socio con membresía activa vigente", content = @Content),
+                        @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
+                        @ApiResponse(responseCode = "403", description = "Acceso denegado (Requiere ADMIN o RECEPCIONISTA)", content = @Content),
+                        @ApiResponse(responseCode = "404", description = "Socio o Plan no encontrado", content = @Content)
+        })
+        @PostMapping
+        @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
+        public ResponseEntity<MembresiaResponseDto> create(
+                        @Valid @RequestBody CreateMembresiaDto request,
+                        @CurrentUser User currentUser) {
+                return ResponseEntity.status(HttpStatus.CREATED).body(membresiaService.create(request, currentUser));
         }
-        return ResponseEntity.ok(membresiaService.cancelar(id, request, currentUser));
-    }
+
+        @Operation(summary = "Listar membresías con filtros avanzados y paginación", description = "Requiere rol ADMIN, RECEPCIONISTA o ENTRENADOR. Filtros disponibles: socio, tipo/plan, sucursal, estado (activa/cancelada/vencida) y fechas.")
+        @ApiResponses(value = {
+                        @ApiResponse(responseCode = "200", description = "Página de membresías obtenida exitosamente"),
+                        @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
+                        @ApiResponse(responseCode = "403", description = "Acceso denegado", content = @Content)
+        })
+        @GetMapping
+        @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA', 'ENTRENADOR')")
+        public ResponseEntity<Page<MembresiaResponseDto>> findAll(
+                        @RequestParam(required = false) Integer socioId,
+                        @RequestParam(required = false) Integer planId,
+                        @RequestParam(required = false) Integer tipoMembresiaId,
+                        @RequestParam(required = false) Integer sucursalId,
+                        @RequestParam(required = false) Integer estadoId,
+                        @RequestParam(required = false) String estado,
+                        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaDesde,
+                        @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaHasta,
+                        @PageableDefault(size = 10, sort = "id") Pageable pageable) {
+
+                Integer effectivePlanId = planId != null ? planId : tipoMembresiaId;
+                return ResponseEntity.ok(membresiaService.findAllPaged(
+                                socioId, effectivePlanId, sucursalId, estadoId, estado, fechaDesde, fechaHasta,
+                                pageable));
+        }
+
+        @Operation(summary = "Consultar membresías del socio autenticado en sesión (/me)", description = "Retorna el historial completo de membresías del usuario socio autenticado")
+        @ApiResponses(value = {
+                        @ApiResponse(responseCode = "200", description = "Historial de membresías obtenido exitosamente"),
+                        @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
+                        @ApiResponse(responseCode = "404", description = "El usuario autenticado no tiene perfil de socio", content = @Content)
+        })
+        @GetMapping("/me")
+        public ResponseEntity<List<MembresiaResponseDto>> findMyMembresias(@CurrentUser User currentUser) {
+                return ResponseEntity.ok(membresiaService.findBySocioId(currentUser.getId()));
+        }
+
+        @Operation(summary = "Consultar membresía activa del socio autenticado en sesión (/me/activa)", description = "Retorna la membresía vigente actual del socio que inició sesión")
+        @ApiResponses(value = {
+                        @ApiResponse(responseCode = "200", description = "Membresía activa vigente", content = @Content(mediaType = "application/json", schema = @Schema(implementation = MembresiaResponseDto.class))),
+                        @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
+                        @ApiResponse(responseCode = "404", description = "No tiene ninguna membresía activa vigente", content = @Content)
+        })
+        @GetMapping("/me/activa")
+        public ResponseEntity<MembresiaResponseDto> findMyActiveMembresia(@CurrentUser User currentUser) {
+                return ResponseEntity.ok(membresiaService.findActiveBySocioId(currentUser.getId()));
+        }
+
+        @Operation(summary = "Buscar membresía por ID", description = "Requiere rol ADMIN, RECEPCIONISTA o ENTRENADOR")
+        @ApiResponses(value = {
+                        @ApiResponse(responseCode = "200", description = "Membresía encontrada", content = @Content(mediaType = "application/json", schema = @Schema(implementation = MembresiaResponseDto.class))),
+                        @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
+                        @ApiResponse(responseCode = "403", description = "Acceso denegado", content = @Content),
+                        @ApiResponse(responseCode = "404", description = "Membresía no encontrada", content = @Content)
+        })
+        @GetMapping("/{id}")
+        @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA', 'ENTRENADOR')")
+        public ResponseEntity<MembresiaResponseDto> findById(@PathVariable Integer id) {
+                return ResponseEntity.ok(membresiaService.findById(id));
+        }
+
+        @Operation(summary = "Consultar membresías de un socio por su ID de socio", description = "Requiere rol ADMIN, RECEPCIONISTA o ENTRENADOR")
+        @ApiResponses(value = {
+                        @ApiResponse(responseCode = "200", description = "Historial de membresías del socio", content = @Content(mediaType = "application/json", array = @ArraySchema(schema = @Schema(implementation = MembresiaResponseDto.class)))),
+                        @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
+                        @ApiResponse(responseCode = "403", description = "Acceso denegado", content = @Content),
+                        @ApiResponse(responseCode = "404", description = "Socio no encontrado", content = @Content)
+        })
+        @GetMapping("/socio/{socioId}")
+        @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA', 'ENTRENADOR')")
+        public ResponseEntity<List<MembresiaResponseDto>> findBySocioId(@PathVariable Integer socioId) {
+                return ResponseEntity.ok(membresiaService.findBySocioId(socioId));
+        }
+
+        @Operation(summary = "Editar membresía por ID", description = "Permite editar: tipo_membresia_id, sucursal_ids (agregar/quitar) y fecha_vencimiento. Aplica validaciones lógicas. NO permite editar ID, socio ni fecha de creación. Registra evento en auditoría. Requiere ADMIN o RECEPCIONISTA.")
+        @ApiResponses(value = {
+                        @ApiResponse(responseCode = "200", description = "Membresía actualizada exitosamente", content = @Content(mediaType = "application/json", schema = @Schema(implementation = MembresiaResponseDto.class))),
+                        @ApiResponse(responseCode = "400", description = "Validaciones de lógica inválidas (ej. fecha vencimiento anterior a inicio)", content = @Content),
+                        @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
+                        @ApiResponse(responseCode = "403", description = "Acceso denegado", content = @Content),
+                        @ApiResponse(responseCode = "404", description = "Membresía, plan o sucursal no encontrada", content = @Content)
+        })
+        @PutMapping("/{id}")
+        @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
+        public ResponseEntity<MembresiaResponseDto> update(
+                        @PathVariable Integer id,
+                        @Valid @RequestBody UpdateMembresiaDto request,
+                        @CurrentUser User currentUser) {
+                return ResponseEntity.ok(membresiaService.update(id, request, currentUser));
+        }
+
+        @Operation(summary = "Cancelar formalmente una membresía por ID", description = "Requiere rol ADMIN o RECEPCIONISTA. Recibe en body: motivo (dropdown/texto), comentarios, reembolso (true/false) y monto_reembolso (si aplica). Cambia estado a 'CANCELADA', registra fecha_cancelacion, usuario que canceló, auditoría y envía email al socio.")
+        @ApiResponses(value = {
+                        @ApiResponse(responseCode = "200", description = "Membresía cancelada exitosamente y socio notificado por correo", content = @Content(mediaType = "application/json", schema = @Schema(implementation = MembresiaResponseDto.class))),
+                        @ApiResponse(responseCode = "400", description = "Monto de reembolso inválido", content = @Content),
+                        @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
+                        @ApiResponse(responseCode = "403", description = "Acceso denegado", content = @Content),
+                        @ApiResponse(responseCode = "404", description = "Membresía no encontrada", content = @Content)
+        })
+        @PostMapping("/{id}/cancelar")
+        @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
+        public ResponseEntity<MembresiaResponseDto> cancelarPost(
+                        @PathVariable Integer id,
+                        @Valid @RequestBody CancelarMembresiaRequestDto request,
+                        @CurrentUser User currentUser) {
+                return ResponseEntity.ok(membresiaService.cancelar(id, request, currentUser));
+        }
+
+        @Operation(summary = "Cancelar membresía vía PATCH (compatibilidad)", description = "Soporta cancelación con body estructurado o parámetro de motivo.")
+        @PatchMapping("/{id}/cancelar")
+        @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
+        public ResponseEntity<MembresiaResponseDto> cancelarPatch(
+                        @PathVariable Integer id,
+                        @RequestBody(required = false) CancelarMembresiaRequestDto request,
+                        @RequestParam(required = false) String motivo,
+                        @CurrentUser User currentUser) {
+                if (request == null) {
+                        request = CancelarMembresiaRequestDto.builder()
+                                        .motivo(motivo != null ? motivo : "Cancelación vía PATCH")
+                                        .reembolso(false)
+                                        .build();
+                }
+                return ResponseEntity.ok(membresiaService.cancelar(id, request, currentUser));
+        }
+
+        @Operation(summary = "Filtrar membresías próximas a vencer", description = "Detector real de membresías activas cuya fecha de vencimiento se encuentre dentro de los próximos X días (7 días por defecto).")
+        @ApiResponses(value = {
+                        @ApiResponse(responseCode = "200", description = "Lista paginada de membresías próximas a vencer"),
+                        @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
+                        @ApiResponse(responseCode = "403", description = "Acceso denegado (Requiere ADMIN o RECEPCIONISTA)", content = @Content)
+        })
+        @GetMapping("/proximas-a-vencer")
+        @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
+        public ResponseEntity<Page<MembresiaResponseDto>> obtenerProximasAVencer(
+                        @RequestParam(required = false, defaultValue = "30") Integer dias,
+                        @PageableDefault(size = 10, sort = "fechaVencimiento") Pageable pageable) {
+                return ResponseEntity.ok(membresiaService.obtenerProximasAVencer(dias, pageable));
+        }
+
+        @Operation(summary = "Enviar correo de recordatorio de vencimiento", description = "Envía una notificación por correo electrónico al socio notificando la fecha de vencimiento y días restantes.")
+        @ApiResponses(value = {
+                        @ApiResponse(responseCode = "200", description = "Correo de recordatorio enviado exitosamente"),
+                        @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
+                        @ApiResponse(responseCode = "403", description = "Acceso denegado (Requiere ADMIN o RECEPCIONISTA)", content = @Content),
+                        @ApiResponse(responseCode = "404", description = "Membresía no encontrada", content = @Content)
+        })
+        @PostMapping("/{id}/enviar-recordatorio")
+        @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
+        public ResponseEntity<java.util.Map<String, String>> enviarRecordatorioVencimiento(
+                        @PathVariable Integer id,
+                        @CurrentUser User currentUser) {
+                membresiaService.enviarRecordatorioVencimiento(id, currentUser);
+                return ResponseEntity.ok(java.util.Map.of("mensaje",
+                                "Correo de recordatorio de vencimiento enviado exitosamente"));
+        }
 }
