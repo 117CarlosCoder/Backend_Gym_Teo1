@@ -135,5 +135,33 @@ public interface MembresiaRepository extends JpaRepository<Membresia, Integer> {
 
     @Query("SELECT DISTINCT m.socio.id FROM Membresia m WHERE m.estadoMembresia.id = 1 AND m.fechaVencimiento >= :fechaActual")
     Set<Integer> findSocioIdsWithActiveMembresia(@Param("fechaActual") LocalDate fechaActual);
+
+    @Query("SELECT DISTINCT m FROM Membresia m " +
+            "JOIN FETCH m.socio s " +
+            "JOIN FETCH s.usuario u " +
+            "JOIN FETCH m.plan p " +
+            "JOIN FETCH m.estadoMembresia e " +
+            "LEFT JOIN FETCH m.sucursales " +
+            "WHERE e.id = 1 " +
+            "AND m.fechaVencimiento BETWEEN :hoy AND :fechaLimite " +
+            "ORDER BY m.fechaVencimiento ASC")
+    List<Membresia> findProximasAVencer(
+            @Param("hoy") LocalDate hoy,
+            @Param("fechaLimite") LocalDate fechaLimite
+    );
+
+    @EntityGraph(attributePaths = {"socio", "socio.usuario", "plan", "estadoMembresia", "sucursales"})
+    @Query(value = "SELECT DISTINCT m FROM Membresia m " +
+            "WHERE m.estadoMembresia.id = 1 " +
+            "AND m.fechaVencimiento BETWEEN :hoy AND :fechaLimite",
+            countQuery = "SELECT COUNT(DISTINCT m) FROM Membresia m " +
+                    "WHERE m.estadoMembresia.id = 1 " +
+                    "AND m.fechaVencimiento BETWEEN :hoy AND :fechaLimite")
+    Page<Membresia> findProximasAVencerPaged(
+            @Param("hoy") LocalDate hoy,
+            @Param("fechaLimite") LocalDate fechaLimite,
+            Pageable pageable
+    );
 }
+
 
