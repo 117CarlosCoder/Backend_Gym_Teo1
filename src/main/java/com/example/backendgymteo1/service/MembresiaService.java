@@ -304,4 +304,43 @@ public class MembresiaService {
             throw new RuntimeException("El socio ID " + socioId + " no cuenta con una membresía activa y vigente para realizar esta acción.");
         }
     }
+
+    public Page<MembresiaResponseDto> obtenerProximasAVencer(Integer dias, Pageable pageable) {
+        int diasFiltrar = (dias != null && dias > 0) ? dias : 7;
+        LocalDate hoy = LocalDate.now();
+        LocalDate fechaLimite = hoy.plusDays(diasFiltrar);
+        return membresiaRepository.findProximasAVencerPaged(hoy, fechaLimite, pageable)
+                .map(membresiaMapper::toDto);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void enviarRecordatorioVencimiento(Integer membresiaId, User usuarioActual) {
+        Membresia membresia = membresiaRepository.findByIdWithDetails(membresiaId)
+                .orElseThrow(() -> new ResourceNotFoundException("Membresía no encontrada con ID: " + membresiaId));
+
+        if (membresia.getSocio() != null && membresia.getSocio().getUsuario() != null) {
+            User socioUser = membresia.getSocio().getUsuario();
+            String nombreSocio = socioUser.getNombres() + " " + socioUser.getApellidos();
+            String nombrePlan = membresia.getPlan() != null ? membresia.getPlan().getNombre() : "Membresía";
+            LocalDate fechaVencimiento = membresia.getFechaVencimiento();
+            long diasRestantes = java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(), fechaVencimiento);
+
+            emailService.enviarRecordatorioVencimiento(
+                    socioUser.getCorreo(),
+                    nombreSocio,
+                    nombrePlan,
+                    fechaVencimiento,
+                    diasRestantes
+            );
+
+            auditoriaService.registrar(
+                    usuarioActual,
+                    "membresia",
+                    "NOTIFY",
+                    membresia.getId(),
+                    String.format("Recordatorio de vencimiento enviado por correo a socio ID %d (%s)", socioUser.getId(), socioUser.getCorreo())
+            );
+        }
+    }
 }
+
