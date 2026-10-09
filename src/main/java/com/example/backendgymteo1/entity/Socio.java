@@ -21,6 +21,7 @@ import lombok.ToString;
 import org.springframework.data.domain.Persistable;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Getter
 @Setter
@@ -38,6 +39,13 @@ public class Socio implements Persistable<Integer> {
 
     @Column(name = "fecha_registro", nullable = false)
     private LocalDate fechaRegistro;
+
+    @Builder.Default
+    @Column(name = "activo", nullable = false)
+    private boolean activo = true;
+
+    @Column(name = "eliminado_en")
+    private LocalDateTime eliminadoEn;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "id_sucursal", nullable = false)

@@ -3,6 +3,7 @@ package com.example.backendgymteo1.service;
 import com.example.backendgymteo1.dto.user.CreateUserDto;
 import com.example.backendgymteo1.dto.user.UpdateProfileDto;
 import com.example.backendgymteo1.dto.user.UpdateUserAdminDto;
+import com.example.backendgymteo1.dto.user.UpdateUserEstadoDto;
 import com.example.backendgymteo1.dto.user.UserResponseDto;
 import com.example.backendgymteo1.entity.User;
 import com.example.backendgymteo1.exception.ResourceNotFoundException;
@@ -13,9 +14,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 @Slf4j
@@ -54,40 +57,59 @@ public class UserService {
         return userMapper.toDto(user, passwordPlana);
     }
 
-    public List<UserResponseDto> findAll() {
-        return userRepository.findByEstadoTrue()
-                .stream()
+    public List<UserResponseDto> findAll(boolean incluirEliminados) {
+        List<User> users = incluirEliminados
+                ? userRepository.findAll()
+                : userRepository.findByEliminadoEnIsNull();
+
+        return users.stream()
                 .map(userMapper::toDto)
                 .toList();
     }
 
+    public List<UserResponseDto> findAll() {
+        return findAll(false);
+    }
+
     public UserResponseDto findById(Integer id) {
-        User user = userRepository.findByIdAndEstadoTrue(id)
+        User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con ID: " + id));
         return userMapper.toDto(user);
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public void remove(Integer id) {
-        User user = userRepository.findByIdAndEstadoTrue(id)
+    public UserResponseDto updateEstado(Integer id, UpdateUserEstadoDto request) {
+        User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con ID: " + id));
 
-        user.setEstado(false);
-        user.setEliminadoEn(LocalDateTime.now());
-
-        user.setCorreo("del_" + user.getId() + "_" + user.getCorreo());
-        user.setDpi("del_" + user.getId() + "_" + user.getDpi());
-        if (user.getTelefono() != null && !user.getTelefono().isBlank()) {
-            user.setTelefono("del_" + user.getId() + "_" + user.getTelefono());
+        if (user.getEliminadoEn() != null) {
+            throw new RuntimeException("No se puede modificar el estado de una cuenta que ha sido eliminada");
         }
 
-        userRepository.save(user);
+        user.setEstado(request.getEstado());
+        user = userRepository.save(user);
+        return userMapper.toDto(user);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
+    public void remove(Integer id) {
+        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS);
+        int updated = userRepository.softDeleteUser(id, now);
+        if (updated == 0) {
+            if (!userRepository.existsById(id)) {
+                throw new ResourceNotFoundException("Usuario no encontrado con ID: " + id);
+            }
+        }
     }
 
     @Transactional(rollbackFor = Exception.class)
     public UserResponseDto updateByAdmin(Integer id, UpdateUserAdminDto request) {
-        User user = userRepository.findByIdAndEstadoTrue(id)
+        User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con ID: " + id));
+
+        if (user.getEliminadoEn() != null) {
+            throw new RuntimeException("No se puede actualizar una cuenta que ha sido eliminada");
+        }
 
         if (request.getDpi() != null && !request.getDpi().isBlank() && !request.getDpi().equals(user.getDpi())) {
             if (userRepository.existsByDpi(request.getDpi())) {
@@ -119,7 +141,7 @@ public class UserService {
 
     @Transactional(rollbackFor = Exception.class)
     public UserResponseDto updateProfile(Integer userId, UpdateProfileDto request) {
-        User user = userRepository.findByIdAndEstadoTrue(userId)
+        User user = userRepository.findByIdAndEliminadoEnIsNull(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con ID: " + userId));
 
         if (request.getCorreo() != null && !request.getCorreo().isBlank()

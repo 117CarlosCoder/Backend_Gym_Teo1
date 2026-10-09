@@ -19,7 +19,8 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleAccessDenied(AccessDeniedException ex) {
         Map<String, String> error = new HashMap<>();
         error.put("error", "Acceso denegado");
-        error.put("message", "No tienes permisos suficientes o tu membresía no se encuentra activa para acceder a este recurso.");
+        error.put("message",
+                "No tienes permisos suficientes o tu membresía no se encuentra activa para acceder a este recurso.");
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
     }
 
@@ -35,18 +36,18 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleDisabledUser(DisabledException ex) {
         Map<String, String> error = new HashMap<>();
         error.put("error", "Usuario deshabilitado");
-        error.put("message", (ex.getMessage() != null && !ex.getMessage().isBlank() && !ex.getMessage().equals("User is disabled"))
-                ? ex.getMessage()
-                : "La cuenta de usuario se encuentra inactiva o ha sido dada de baja.");
+        error.put("message",
+                (ex.getMessage() != null && !ex.getMessage().isBlank() && !ex.getMessage().equals("User is disabled"))
+                        ? ex.getMessage()
+                        : "La cuenta de usuario se encuentra inactiva o ha sido dada de baja.");
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, String>> handleValidationExceptions(MethodArgumentNotValidException ex) {
         Map<String, String> errors = new HashMap<>();
-        ex.getBindingResult().getFieldErrors().forEach(error ->
-            errors.put(error.getField(), error.getDefaultMessage())
-        );
+        ex.getBindingResult().getFieldErrors()
+                .forEach(error -> errors.put(error.getField(), error.getDefaultMessage()));
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errors);
     }
 
@@ -58,14 +59,37 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
     }
 
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    public ResponseEntity<Map<String, String>> handleDataIntegrityViolation(
+            org.springframework.dao.DataIntegrityViolationException ex) {
+        Map<String, String> error = new HashMap<>();
+        error.put("error", "Conflicto de integridad de datos");
+        error.put("message", "El correo, DPI o nombre de usuario ya se encuentra registrado.");
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+
+    @ExceptionHandler({
+            org.springframework.dao.DataAccessException.class,
+            jakarta.persistence.PersistenceException.class
+    })
+    public ResponseEntity<Map<String, String>> handleDatabaseException(Exception ex) {
+        Map<String, String> error = new HashMap<>();
+        error.put("error", "Error de base de datos");
+        error.put("message", "Ocurrió un error al procesar la operación en la base de datos.");
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<Map<String, String>> handleRuntimeException(RuntimeException ex) {
         Map<String, String> error = new HashMap<>();
         error.put("error", "Error en la solicitud");
         String message = ex.getMessage();
-        if (message == null || message.toLowerCase().contains("sql") || message.toLowerCase().contains("table")
-                || message.toLowerCase().contains("record has changed") || message.toLowerCase().contains("mariadb")) {
-            message = "Ocurrió un error al procesar la solicitud.";
+        if (message != null) {
+            String lower = message.toLowerCase();
+            if (lower.contains("sql") || lower.contains("record has changed") || lower.contains("constraint")
+                    || lower.contains("jdbc")) {
+                message = "Ocurrió un error al procesar la solicitud.";
+            }
         }
         error.put("message", message);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
