@@ -26,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -122,7 +123,7 @@ public class SocioService {
 
         return page.map(s -> {
             String estadoCalculado;
-            if (s.getUsuario() != null && !s.getUsuario().isEstado()) {
+            if (!s.isActivo() || s.getEliminadoEn() != null || (s.getUsuario() != null && (!s.getUsuario().isEstado() || s.getUsuario().getEliminadoEn() != null))) {
                 estadoCalculado = "INACTIVO";
             } else if (activeSocioIds.contains(s.getId())) {
                 estadoCalculado = "ACTIVO";
@@ -148,6 +149,7 @@ public class SocioService {
     public SocioResponseDto findById(Integer id) {
         Socio socio = socioRepository.findByIdAndActiveWithUser(id)
                 .orElseGet(() -> socioRepository.findByIdWithUser(id)
+                        .filter(s -> s.getEliminadoEn() == null && (s.getUsuario() == null || s.getUsuario().getEliminadoEn() == null))
                         .orElseThrow(() -> new ResourceNotFoundException("Socio no encontrado con ID: " + id)));
 
         MembresiaResumenDto membresiaResumen = membresiaRepository.findActiveBySocioId(id, LocalDate.now())
@@ -177,19 +179,25 @@ public class SocioService {
 
     @Transactional(rollbackFor = Exception.class)
     public SocioResponseDto update(Integer id, UpdateSocioDto request, User usuarioActual) {
-        Socio socio = socioRepository.findByIdAndActiveWithUser(id)
-                .orElseGet(() -> socioRepository.findByIdWithUser(id)
-                        .orElseThrow(() -> new ResourceNotFoundException("Socio no encontrado con ID: " + id)));
+        Socio socio = socioRepository.findByIdWithUser(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Socio no encontrado con ID: " + id));
+
+        if (socio.getEliminadoEn() != null) {
+            throw new RuntimeException("No se puede actualizar el perfil de un socio eliminado");
+        }
 
         User user = socio.getUsuario();
+        if (user != null && user.getEliminadoEn() != null) {
+            throw new RuntimeException("No se puede actualizar el perfil de socio porque la cuenta de usuario ha sido eliminada");
+        }
 
-        if (request.getDpi() != null && !request.getDpi().isBlank() && !request.getDpi().equals(user.getDpi())) {
+        if (request.getDpi() != null && !request.getDpi().isBlank() && user != null && !request.getDpi().equals(user.getDpi())) {
             if (userRepository.existsByDpi(request.getDpi())) {
                 throw new RuntimeException("El DPI ya está registrado por otro usuario");
             }
         }
 
-        if (request.getCorreo() != null && !request.getCorreo().isBlank()
+        if (request.getCorreo() != null && !request.getCorreo().isBlank() && user != null
                 && !request.getCorreo().equalsIgnoreCase(user.getCorreo())) {
             if (userRepository.existsByCorreo(request.getCorreo())) {
                 throw new RuntimeException("El correo ya está registrado por otro usuario");
@@ -197,23 +205,25 @@ public class SocioService {
         }
 
         List<String> cambios = new ArrayList<>();
-        if (request.getNombres() != null && !Objects.equals(request.getNombres(), user.getNombres())) {
-            cambios.add(String.format("nombres: '%s' -> '%s'", user.getNombres(), request.getNombres()));
-        }
-        if (request.getApellidos() != null && !Objects.equals(request.getApellidos(), user.getApellidos())) {
-            cambios.add(String.format("apellidos: '%s' -> '%s'", user.getApellidos(), request.getApellidos()));
-        }
-        if (request.getCorreo() != null && !Objects.equals(request.getCorreo(), user.getCorreo())) {
-            cambios.add(String.format("correo: '%s' -> '%s'", user.getCorreo(), request.getCorreo()));
-        }
-        if (request.getTelefono() != null && !Objects.equals(request.getTelefono(), user.getTelefono())) {
-            cambios.add(String.format("telefono: '%s' -> '%s'", user.getTelefono(), request.getTelefono()));
-        }
-        if (request.getDireccion() != null && !Objects.equals(request.getDireccion(), user.getDireccion())) {
-            cambios.add(String.format("direccion: '%s' -> '%s'", user.getDireccion(), request.getDireccion()));
-        }
-        if (request.getFechaNacimiento() != null && !Objects.equals(request.getFechaNacimiento(), user.getFechaNacimiento())) {
-            cambios.add(String.format("fechaNacimiento: '%s' -> '%s'", user.getFechaNacimiento(), request.getFechaNacimiento()));
+        if (user != null) {
+            if (request.getNombres() != null && !Objects.equals(request.getNombres(), user.getNombres())) {
+                cambios.add(String.format("nombres: '%s' -> '%s'", user.getNombres(), request.getNombres()));
+            }
+            if (request.getApellidos() != null && !Objects.equals(request.getApellidos(), user.getApellidos())) {
+                cambios.add(String.format("apellidos: '%s' -> '%s'", user.getApellidos(), request.getApellidos()));
+            }
+            if (request.getCorreo() != null && !Objects.equals(request.getCorreo(), user.getCorreo())) {
+                cambios.add(String.format("correo: '%s' -> '%s'", user.getCorreo(), request.getCorreo()));
+            }
+            if (request.getTelefono() != null && !Objects.equals(request.getTelefono(), user.getTelefono())) {
+                cambios.add(String.format("telefono: '%s' -> '%s'", user.getTelefono(), request.getTelefono()));
+            }
+            if (request.getDireccion() != null && !Objects.equals(request.getDireccion(), user.getDireccion())) {
+                cambios.add(String.format("direccion: '%s' -> '%s'", user.getDireccion(), request.getDireccion()));
+            }
+            if (request.getFechaNacimiento() != null && !Objects.equals(request.getFechaNacimiento(), user.getFechaNacimiento())) {
+                cambios.add(String.format("fechaNacimiento: '%s' -> '%s'", user.getFechaNacimiento(), request.getFechaNacimiento()));
+            }
         }
         if (request.getSucursalId() != null && (socio.getSucursal() == null || !Objects.equals(request.getSucursalId(), socio.getSucursal().getId()))) {
             Sucursal nuevaSucursal = sucursalRepository.findById(request.getSucursalId())
@@ -223,7 +233,9 @@ public class SocioService {
         }
 
         socioMapper.updateEntity(socio, request);
-        userRepository.save(user);
+        if (user != null) {
+            userRepository.save(user);
+        }
         socio = socioRepository.save(socio);
 
         String descripcionCambios = cambios.isEmpty() ? "Actualización de socio sin cambios detectados" : String.join(", ", cambios);
@@ -239,59 +251,46 @@ public class SocioService {
 
     @Transactional(rollbackFor = Exception.class)
     public void remove(Integer id, User usuarioActual) {
-        Socio socio = socioRepository.findByIdAndActiveWithUser(id)
+        Socio socio = socioRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Socio no encontrado con ID: " + id));
 
-        User user = socio.getUsuario();
-
-        user.setEstado(false);
-        user.setEliminadoEn(LocalDateTime.now());
-
-        user.setCorreo("del_" + user.getId() + "_" + user.getCorreo());
-        user.setDpi("del_" + user.getId() + "_" + user.getDpi());
-        if (user.getTelefono() != null && !user.getTelefono().isBlank()) {
-            user.setTelefono("del_" + user.getId() + "_" + user.getTelefono());
+        if (socio.getEliminadoEn() != null) {
+            return;
         }
 
-        userRepository.save(user);
+        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS);
+        socioRepository.softDeleteSocio(id, now);
 
         auditoriaService.registrar(
                 usuarioActual,
                 "socio",
                 "DELETE",
                 socio.getId(),
-                "Baja lógica (soft delete) del socio con ID: " + socio.getId()
+                "Baja lógica (soft delete) del perfil de socio con ID: " + socio.getId()
         );
     }
 
     @Transactional(rollbackFor = Exception.class)
     public SocioResponseDto reactivar(Integer id, User usuarioActual) {
         Socio socio = socioRepository.findByIdWithUser(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Socio no encontrado con ID: " + id));
+                .orElseGet(() -> socioRepository.findById(id)
+                        .orElseThrow(() -> new ResourceNotFoundException("Socio no encontrado con ID: " + id)));
 
         User user = socio.getUsuario();
-        user.setEstado(true);
-        user.setEliminadoEn(null);
-
-        String prefix = "del_" + user.getId() + "_";
-        if (user.getCorreo() != null && user.getCorreo().startsWith(prefix)) {
-            user.setCorreo(user.getCorreo().substring(prefix.length()));
-        }
-        if (user.getDpi() != null && user.getDpi().startsWith(prefix)) {
-            user.setDpi(user.getDpi().substring(prefix.length()));
-        }
-        if (user.getTelefono() != null && user.getTelefono().startsWith(prefix)) {
-            user.setTelefono(user.getTelefono().substring(prefix.length()));
+        if (user != null && user.getEliminadoEn() != null) {
+            throw new RuntimeException("No se puede reactivar el perfil de socio porque la cuenta de usuario ha sido eliminada");
         }
 
-        userRepository.save(user);
+        socio.setActivo(true);
+        socio.setEliminadoEn(null);
+        socioRepository.save(socio);
 
         auditoriaService.registrar(
                 usuarioActual,
                 "socio",
                 "UPDATE",
                 socio.getId(),
-                "Reactivación de socio previamente dado de baja con ID: " + socio.getId()
+                "Reactivación del perfil de socio previamente dado de baja con ID: " + socio.getId()
         );
 
         return findById(id);
