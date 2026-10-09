@@ -58,11 +58,12 @@ public class SocioMapper {
                     .build();
         }
 
-        Boolean estado = socio.getUsuario() != null ? socio.getUsuario().isEstado() : null;
+        Boolean estado = socio.isActivo();
 
         String resolvedEstadoSocio = estadoSocio;
         if (resolvedEstadoSocio == null) {
-            if (socio.getUsuario() != null && !socio.getUsuario().isEstado()) {
+            if (!socio.isActivo() || socio.getEliminadoEn() != null
+                    || (socio.getUsuario() != null && (!socio.getUsuario().isEstado() || socio.getUsuario().getEliminadoEn() != null))) {
                 resolvedEstadoSocio = "INACTIVO";
             } else if (membresiaActual != null) {
                 resolvedEstadoSocio = "ACTIVO";
@@ -110,6 +111,7 @@ public class SocioMapper {
                 .usuario(user)
                 .sucursal(sucursal)
                 .fechaRegistro(fechaRegistro != null ? fechaRegistro : LocalDate.now())
+                .activo(true)
                 .build();
     }
 
@@ -137,11 +139,19 @@ public class SocioMapper {
             if (request.getFechaNacimiento() != null) {
                 user.setFechaNacimiento(request.getFechaNacimiento());
             }
-            if (request.getEstadoSocio() != null && !request.getEstadoSocio().isBlank()) {
-                user.setEstado(!"INACTIVO".equalsIgnoreCase(request.getEstadoSocio().trim()));
-            } else if (request.getEstado() != null) {
-                user.setEstado(request.getEstado());
+        }
+
+        if (request.getEstadoSocio() != null && !request.getEstadoSocio().isBlank()) {
+            String valor = request.getEstadoSocio().trim().toUpperCase();
+            if ("ACTIVO".equals(valor)) {
+                socio.setActivo(true);
+            } else if ("INACTIVO".equals(valor)) {
+                socio.setActivo(false);
+            } else {
+                throw new RuntimeException("Estado de socio inválido: '" + request.getEstadoSocio() + "'. Valores permitidos: ACTIVO, INACTIVO");
             }
+        } else if (request.getEstado() != null) {
+            socio.setActivo(request.getEstado());
         }
     }
 }
