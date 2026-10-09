@@ -241,6 +241,7 @@ class SocioServiceTest {
     @Test
     @DisplayName("Actualizar socio debe modificar datos permitidos, validar email y registrar auditoría detallada")
     void testUpdateSocio_AuditLogsChanges() {
+        when(socioRepository.findByIdWithUser(10)).thenReturn(Optional.of(socioEntity));
         when(socioRepository.findByIdAndActiveWithUser(10)).thenReturn(Optional.of(socioEntity));
         when(userRepository.existsByCorreo("carlos.nuevo@gymdemo.com")).thenReturn(false);
         when(userRepository.save(any(User.class))).thenReturn(socioUser);
