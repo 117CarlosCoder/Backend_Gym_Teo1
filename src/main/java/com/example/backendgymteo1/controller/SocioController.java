@@ -115,9 +115,9 @@ public class SocioController {
         return ResponseEntity.ok(socioService.update(id, request, currentUser));
     }
 
-    @Operation(summary = "Desactivar un socio por ID (Soft Delete)", description = "Requiere rol ADMIN o RECEPCIONISTA. Registra en auditoría.")
+    @Operation(summary = "Dar de baja el perfil de un socio por ID (Soft Delete)", description = "Requiere rol ADMIN o RECEPCIONISTA. Realiza baja lógica ÚNICAMENTE sobre el perfil de socio, manteniendo intacta la cuenta de usuario (credenciales, correo, DPI, teléfono, rol) y los registros históricos (pagos, asistencias, membresías). Operación idempotente. Registra en auditoría.")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "204", description = "Socio desactivado exitosamente"),
+            @ApiResponse(responseCode = "204", description = "Perfil de socio dado de baja exitosamente"),
             @ApiResponse(responseCode = "404", description = "Socio no encontrado", content = @Content),
             @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
             @ApiResponse(responseCode = "403", description = "Acceso denegado", content = @Content)
@@ -131,10 +131,11 @@ public class SocioController {
         return ResponseEntity.noContent().build();
     }
 
-    @Operation(summary = "Reactivar un socio dado de baja", description = "Restaura la cuenta de un socio inactivo a activo. Requiere rol ADMIN o RECEPCIONISTA. Registra en auditoría.")
+    @Operation(summary = "Reactivar el perfil de un socio dado de baja", description = "Restaura ÚNICAMENTE el perfil operativo del socio a activo. No reactiva la cuenta de usuario si estaba inactiva y no permite reactivar si la cuenta de usuario ha sido eliminada. Requiere rol ADMIN o RECEPCIONISTA. Registra en auditoría.")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Socio reactivado exitosamente",
+            @ApiResponse(responseCode = "200", description = "Perfil de socio reactivado exitosamente",
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = SocioResponseDto.class))),
+            @ApiResponse(responseCode = "400", description = "La cuenta de usuario asociada ha sido eliminada", content = @Content),
             @ApiResponse(responseCode = "404", description = "Socio no encontrado", content = @Content),
             @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
             @ApiResponse(responseCode = "403", description = "Acceso denegado", content = @Content)

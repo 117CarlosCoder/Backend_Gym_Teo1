@@ -36,9 +36,12 @@ public class SocioProfileStrategy implements RoleProfileStrategy {
                     .usuario(user)
                     .sucursal(sucursalDefault)
                     .fechaRegistro(LocalDate.now())
+                    .activo(true)
                     .build());
             log.info("[Strategy] Perfil de socio creado para usuario ID {} (Sucursal: {})",
                     user.getId(), sucursalDefault != null ? sucursalDefault.getNombre() : "N/A");
+        } else {
+            log.info("[Strategy] Perfil de socio ya existe para usuario ID {}. No se sobrescribe ni se autorevive.", user.getId());
         }
     }
 }

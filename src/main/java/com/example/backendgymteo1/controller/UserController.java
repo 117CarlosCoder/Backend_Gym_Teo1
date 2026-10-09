@@ -4,6 +4,7 @@ import com.example.backendgymteo1.config.security.CurrentUser;
 import com.example.backendgymteo1.dto.user.CreateUserDto;
 import com.example.backendgymteo1.dto.user.UpdateProfileDto;
 import com.example.backendgymteo1.dto.user.UpdateUserAdminDto;
+import com.example.backendgymteo1.dto.user.UpdateUserEstadoDto;
 import com.example.backendgymteo1.dto.user.UserResponseDto;
 import com.example.backendgymteo1.entity.User;
 import com.example.backendgymteo1.mapper.UserMapper;
@@ -22,11 +23,13 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -38,103 +41,115 @@ import java.util.List;
 @CrossOrigin(origins = "*")
 public class UserController {
 
-    private final UserService userService;
-    private final UserMapper userMapper;
+        private final UserService userService;
+        private final UserMapper userMapper;
 
-    @Operation(summary = "Crear un nuevo usuario / entrenador / miembro", description = "Requiere rol ADMIN. La contraseña es autogenerada de forma segura y notificada al usuario por correo electrónico.")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "201", description = "Usuario creado exitosamente",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponseDto.class))),
-            @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos", content = @Content),
-            @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
-            @ApiResponse(responseCode = "403", description = "Acceso denegado (Requiere ADMIN)", content = @Content)
-    })
-    @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<UserResponseDto> create(@Valid @RequestBody CreateUserDto request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(userService.create(request));
-    }
+        @Operation(summary = "Crear un nuevo usuario / entrenador / miembro", description = "Requiere rol ADMIN. La contraseña es autogenerada de forma segura y notificada al usuario por correo electrónico.")
+        @ApiResponses(value = {
+                        @ApiResponse(responseCode = "201", description = "Usuario creado exitosamente", content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponseDto.class))),
+                        @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos", content = @Content),
+                        @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
+                        @ApiResponse(responseCode = "403", description = "Acceso denegado (Requiere ADMIN)", content = @Content)
+        })
+        @PostMapping
+        @PreAuthorize("hasRole('ADMIN')")
+        public ResponseEntity<UserResponseDto> create(@Valid @RequestBody CreateUserDto request) {
+                return ResponseEntity.status(HttpStatus.CREATED).body(userService.create(request));
+        }
 
-    @Operation(summary = "Listar todos los usuarios activos", description = "Requiere rol ADMIN o RECEPCIONISTA")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Lista de usuarios obtenida exitosamente"),
-            @ApiResponse(responseCode = "401", description = "No autenticado (Token ausente o inválido)", content = @Content),
-            @ApiResponse(responseCode = "403", description = "Acceso denegado (Rol insuficiente)", content = @Content)
-    })
-    @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
-    public ResponseEntity<List<UserResponseDto>> findAll() {
-        return ResponseEntity.ok(userService.findAll());
-    }
+        @Operation(summary = "Listar usuarios del sistema", description = "Requiere rol ADMIN o RECEPCIONISTA. Por defecto retorna únicamente cuentas vigentes. Con el parámetro opcional incluirEliminados=true incluye también cuentas con baja lógica (soft delete).")
+        @ApiResponses(value = {
+                        @ApiResponse(responseCode = "200", description = "Lista de usuarios obtenida exitosamente"),
+                        @ApiResponse(responseCode = "401", description = "No autenticado (Token ausente o inválido)", content = @Content),
+                        @ApiResponse(responseCode = "403", description = "Acceso denegado (Rol insuficiente)", content = @Content)
+        })
+        @GetMapping
+        @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
+        public ResponseEntity<List<UserResponseDto>> findAll(
+                        @RequestParam(required = false, defaultValue = "false") boolean incluirEliminados) {
+                return ResponseEntity.ok(userService.findAll(incluirEliminados));
+        }
 
-    @Operation(summary = "Buscar usuario por ID", description = "Requiere rol ADMIN o RECEPCIONISTA")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Usuario encontrado",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponseDto.class))),
-            @ApiResponse(responseCode = "404", description = "Usuario no encontrado", content = @Content),
-            @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
-            @ApiResponse(responseCode = "403", description = "Acceso denegado", content = @Content)
-    })
-    @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
-    public ResponseEntity<UserResponseDto> findOne(@PathVariable Integer id) {
-        return ResponseEntity.ok(userService.findById(id));
-    }
+        @Operation(summary = "Buscar usuario por ID", description = "Requiere rol ADMIN o RECEPCIONISTA. Permite consultar cualquier cuenta por ID, incluyendo aquellas con baja lógica (soft delete).")
+        @ApiResponses(value = {
+                        @ApiResponse(responseCode = "200", description = "Usuario encontrado", content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponseDto.class))),
+                        @ApiResponse(responseCode = "404", description = "Usuario no encontrado", content = @Content),
+                        @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
+                        @ApiResponse(responseCode = "403", description = "Acceso denegado", content = @Content)
+        })
+        @GetMapping("/{id}")
+        @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
+        public ResponseEntity<UserResponseDto> findOne(@PathVariable Integer id) {
+                return ResponseEntity.ok(userService.findById(id));
+        }
 
-    @Operation(summary = "Obtener el perfil del usuario autenticado actual", description = "Extrae los datos a partir del token JWT de la sesión")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Perfil del usuario autenticado",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponseDto.class))),
-            @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
-            @ApiResponse(responseCode = "403", description = "Acceso denegado", content = @Content)
-    })
-    @GetMapping("/me")
-    public ResponseEntity<UserResponseDto> findOneMe(@CurrentUser User currentUser) {
-        return ResponseEntity.ok(userMapper.toDto(currentUser));
-    }
+        @Operation(summary = "Obtener el perfil del usuario autenticado actual", description = "Extrae los datos a partir del token JWT de la sesión")
+        @ApiResponses(value = {
+                        @ApiResponse(responseCode = "200", description = "Perfil del usuario autenticado", content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponseDto.class))),
+                        @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
+                        @ApiResponse(responseCode = "403", description = "Acceso denegado", content = @Content)
+        })
+        @GetMapping("/me")
+        public ResponseEntity<UserResponseDto> findOneMe(@CurrentUser User currentUser) {
+                return ResponseEntity.ok(userMapper.toDto(currentUser));
+        }
 
-    @Operation(summary = "Actualizar perfil del usuario autenticado actual", description = "Permite modificar datos de contacto y/o cambiar contraseña")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Perfil actualizado exitosamente",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponseDto.class))),
-            @ApiResponse(responseCode = "400", description = "Datos inválidos o contraseña actual incorrecta", content = @Content),
-            @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content)
-    })
-    @PutMapping("/me")
-    public ResponseEntity<UserResponseDto> updateProfile(
-            @CurrentUser User currentUser,
-            @Valid @RequestBody UpdateProfileDto request) {
-        return ResponseEntity.ok(userService.updateProfile(currentUser.getId(), request));
-    }
+        @Operation(summary = "Actualizar perfil del usuario autenticado actual", description = "Permite modificar datos de contacto y/o cambiar contraseña")
+        @ApiResponses(value = {
+                        @ApiResponse(responseCode = "200", description = "Perfil actualizado exitosamente", content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponseDto.class))),
+                        @ApiResponse(responseCode = "400", description = "Datos inválidos o contraseña actual incorrecta", content = @Content),
+                        @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content)
+        })
+        @PutMapping("/me")
+        public ResponseEntity<UserResponseDto> updateProfile(
+                        @CurrentUser User currentUser,
+                        @Valid @RequestBody UpdateProfileDto request) {
+                return ResponseEntity.ok(userService.updateProfile(currentUser.getId(), request));
+        }
 
-    @Operation(summary = "Actualizar información de un usuario por ID", description = "Requiere rol ADMIN. Permite modificar datos, rol, estado y restablecer contraseña")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Usuario actualizado exitosamente",
-                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponseDto.class))),
-            @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos", content = @Content),
-            @ApiResponse(responseCode = "404", description = "Usuario no encontrado", content = @Content),
-            @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
-            @ApiResponse(responseCode = "403", description = "Acceso denegado (Requiere ADMIN)", content = @Content)
-    })
-    @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<UserResponseDto> updateByAdmin(
-            @PathVariable Integer id,
-            @Valid @RequestBody UpdateUserAdminDto request) {
-        return ResponseEntity.ok(userService.updateByAdmin(id, request));
-    }
+        @Operation(summary = "Actualizar información de un usuario por ID", description = "Requiere rol ADMIN. Permite modificar datos, rol, estado y restablecer contraseña en cuentas activas o inactivas no eliminadas.")
+        @ApiResponses(value = {
+                        @ApiResponse(responseCode = "200", description = "Usuario actualizado exitosamente", content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponseDto.class))),
+                        @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos o cuenta eliminada", content = @Content),
+                        @ApiResponse(responseCode = "404", description = "Usuario no encontrado", content = @Content),
+                        @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
+                        @ApiResponse(responseCode = "403", description = "Acceso denegado (Requiere ADMIN)", content = @Content)
+        })
+        @PutMapping("/{id}")
+        @PreAuthorize("hasRole('ADMIN')")
+        public ResponseEntity<UserResponseDto> updateByAdmin(
+                        @PathVariable Integer id,
+                        @Valid @RequestBody UpdateUserAdminDto request) {
+                return ResponseEntity.ok(userService.updateByAdmin(id, request));
+        }
 
-    @Operation(summary = "Desactivar un usuario por ID", description = "Requiere rol ADMIN")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "204", description = "Usuario desactivado exitosamente"),
-            @ApiResponse(responseCode = "404", description = "Usuario no encontrado", content = @Content),
-            @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
-            @ApiResponse(responseCode = "403", description = "Acceso denegado", content = @Content)
-    })
-    @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Void> remove(@PathVariable Integer id) {
-        userService.remove(id);
-        return ResponseEntity.noContent().build();
-    }
+        @Operation(summary = "Modificar estado de activación de un usuario", description = "Requiere rol ADMIN. Solo aplica a cuentas no eliminadas; permite desactivar (false) o reactivar (true) la cuenta preservando credenciales, identificadores y perfiles subordinados.")
+        @ApiResponses(value = {
+                        @ApiResponse(responseCode = "200", description = "Estado de usuario actualizado exitosamente", content = @Content(mediaType = "application/json", schema = @Schema(implementation = UserResponseDto.class))),
+                        @ApiResponse(responseCode = "400", description = "Datos inválidos o la cuenta se encuentra eliminada", content = @Content),
+                        @ApiResponse(responseCode = "404", description = "Usuario no encontrado", content = @Content),
+                        @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
+                        @ApiResponse(responseCode = "403", description = "Acceso denegado (Requiere ADMIN)", content = @Content)
+        })
+        @PatchMapping("/{id}/estado")
+        @PreAuthorize("hasRole('ADMIN')")
+        public ResponseEntity<UserResponseDto> updateEstado(
+                        @PathVariable Integer id,
+                        @Valid @RequestBody UpdateUserEstadoDto request) {
+                return ResponseEntity.ok(userService.updateEstado(id, request));
+        }
+
+        @Operation(summary = "Eliminar lógicamente una cuenta de usuario (Soft Delete)", description = "Requiere rol ADMIN. Realiza baja lógica liberando correo, DPI y username (estableciéndolos en NULL) para permitir su reasignación. Conserva teléfono y datos históricos. Operación idempotente.")
+        @ApiResponses(value = {
+                        @ApiResponse(responseCode = "204", description = "Cuenta de usuario dada de baja exitosamente"),
+                        @ApiResponse(responseCode = "404", description = "Usuario no encontrado", content = @Content),
+                        @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
+                        @ApiResponse(responseCode = "403", description = "Acceso denegado (Requiere ADMIN)", content = @Content)
+        })
+        @DeleteMapping("/{id}")
+        @PreAuthorize("hasRole('ADMIN')")
+        public ResponseEntity<Void> remove(@PathVariable Integer id) {
+                userService.remove(id);
+                return ResponseEntity.noContent().build();
+        }
 }
