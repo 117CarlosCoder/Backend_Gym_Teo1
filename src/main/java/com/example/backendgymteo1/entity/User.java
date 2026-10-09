@@ -24,6 +24,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
@@ -56,7 +57,7 @@ public class User implements UserDetails {
     @Column(name = "apellidos", nullable = false, length = 100)
     private String apellidos;
 
-    @Column(name = "correo", nullable = false, unique = true, length = 150)
+    @Column(name = "correo", unique = true, length = 150)
     private String correo;
 
     @Column(name = "telefono", length = 20)
@@ -95,10 +96,10 @@ public class User implements UserDetails {
     @PrePersist
     protected void onCreate() {
         if (this.creadoEn == null) {
-            this.creadoEn = LocalDateTime.now();
+            this.creadoEn = LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS);
         }
         if (this.actualizadoEn == null) {
-            this.actualizadoEn = LocalDateTime.now();
+            this.actualizadoEn = LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS);
         }
         if (this.username == null || this.username.isBlank()) {
             this.username = this.correo;
@@ -110,7 +111,7 @@ public class User implements UserDetails {
 
     @PreUpdate
     protected void onUpdate() {
-        this.actualizadoEn = LocalDateTime.now();
+        this.actualizadoEn = LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS);
     }
 
     @Override

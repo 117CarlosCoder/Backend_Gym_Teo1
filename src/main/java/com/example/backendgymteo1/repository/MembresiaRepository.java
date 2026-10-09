@@ -91,7 +91,12 @@ public interface MembresiaRepository extends JpaRepository<Membresia, Integer> {
     List<Membresia> findBySocioIdWithDetails(@Param("socioId") Integer socioId);
 
     @Query("SELECT COUNT(m) > 0 FROM Membresia m " +
-            "WHERE m.socio.id = :socioId " +
+            "JOIN m.socio s JOIN s.usuario u " +
+            "WHERE s.id = :socioId " +
+            "AND s.activo = true " +
+            "AND s.eliminadoEn IS NULL " +
+            "AND u.estado = true " +
+            "AND u.eliminadoEn IS NULL " +
             "AND m.estadoMembresia.id = :estadoId " +
             "AND m.fechaVencimiento >= :fechaActual")
     boolean existsActiveBySocio(
@@ -107,6 +112,8 @@ public interface MembresiaRepository extends JpaRepository<Membresia, Integer> {
             "JOIN FETCH m.estadoMembresia e " +
             "LEFT JOIN FETCH m.sucursales " +
             "WHERE s.id = :socioId " +
+            "AND s.activo = true " +
+            "AND s.eliminadoEn IS NULL " +
             "AND u.estado = true " +
             "AND u.eliminadoEn IS NULL " +
             "AND e.id = 1 " +
@@ -119,10 +126,15 @@ public interface MembresiaRepository extends JpaRepository<Membresia, Integer> {
 
     @Query("SELECT DISTINCT m FROM Membresia m " +
             "JOIN FETCH m.socio s " +
+            "JOIN FETCH s.usuario u " +
             "JOIN FETCH m.plan p " +
             "JOIN FETCH m.estadoMembresia e " +
             "LEFT JOIN FETCH m.sucursales " +
             "WHERE s.id = :socioId " +
+            "AND s.activo = true " +
+            "AND s.eliminadoEn IS NULL " +
+            "AND u.estado = true " +
+            "AND u.eliminadoEn IS NULL " +
             "AND e.id = :estadoId " +
             "AND m.fechaVencimiento >= :fechaActual")
     List<Membresia> findActiveMembershipsBySocio(
@@ -133,7 +145,11 @@ public interface MembresiaRepository extends JpaRepository<Membresia, Integer> {
 
     boolean existsByPlanId(Integer planId);
 
-    @Query("SELECT DISTINCT m.socio.id FROM Membresia m WHERE m.estadoMembresia.id = 1 AND m.fechaVencimiento >= :fechaActual")
+    @Query("SELECT DISTINCT m.socio.id FROM Membresia m " +
+           "JOIN m.socio s JOIN s.usuario u " +
+           "WHERE s.activo = true AND s.eliminadoEn IS NULL " +
+           "AND u.estado = true AND u.eliminadoEn IS NULL " +
+           "AND m.estadoMembresia.id = 1 AND m.fechaVencimiento >= :fechaActual")
     Set<Integer> findSocioIdsWithActiveMembresia(@Param("fechaActual") LocalDate fechaActual);
 
     @Query("SELECT DISTINCT m FROM Membresia m " +
