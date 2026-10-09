@@ -46,6 +46,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -244,6 +245,8 @@ class SocioServiceTest {
         when(userRepository.existsByCorreo("carlos.nuevo@gymdemo.com")).thenReturn(false);
         when(userRepository.save(any(User.class))).thenReturn(socioUser);
         when(socioRepository.save(any(Socio.class))).thenReturn(socioEntity);
+        when(membresiaRepository.findActiveBySocioId(eq(10), any(LocalDate.class))).thenReturn(Optional.empty());
+        when(asistenciaRepository.findUltimaAsistenciaBySocioId(10)).thenReturn(Optional.empty());
 
         UpdateSocioDto updateRequest = UpdateSocioDto.builder()
                 .nombres("Carlos Modificado")
@@ -254,7 +257,7 @@ class SocioServiceTest {
                 .build();
 
         SocioResponseDto updatedDto = SocioResponseDto.builder().id(10).build();
-        when(socioMapper.toDto(eq(socioEntity), eq(null), any(), any())).thenReturn(updatedDto);
+        when(socioMapper.toDto(eq(socioEntity), isNull(), isNull(), isNull())).thenReturn(updatedDto);
 
         SocioResponseDto result = socioService.update(10, updateRequest, adminUser);
 
