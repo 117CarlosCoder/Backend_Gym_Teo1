@@ -141,6 +141,24 @@ public interface MembresiaRepository extends JpaRepository<Membresia, Integer> {
 
         boolean existsByPlanId(Integer planId);
 
+        @Query("SELECT DISTINCT m FROM Membresia m " +
+                        "JOIN FETCH m.socio s " +
+                        "JOIN FETCH s.usuario u " +
+                        "JOIN FETCH m.plan p " +
+                        "JOIN FETCH m.estadoMembresia e " +
+                        "WHERE (e.id = 1 OR UPPER(e.nombre) = 'ACTIVA') " +
+                        "AND m.fechaInicio <= :hoy " +
+                        "AND m.fechaVencimiento >= :hoy " +
+                        "AND m.fechaVencimiento <= :maxFechaVencimiento " +
+                        "AND s.activo = true " +
+                        "AND s.eliminadoEn IS NULL " +
+                        "AND u.estado = true " +
+                        "AND u.eliminadoEn IS NULL " +
+                        "ORDER BY m.fechaVencimiento ASC")
+        List<Membresia> findMembresiasParaRecordatorio(
+                        @Param("hoy") LocalDate hoy,
+                        @Param("maxFechaVencimiento") LocalDate maxFechaVencimiento);
+
         @Query("SELECT DISTINCT m.socio.id FROM Membresia m " +
                         "JOIN m.socio s JOIN s.usuario u " +
                         "WHERE s.activo = true AND s.eliminadoEn IS NULL " +
