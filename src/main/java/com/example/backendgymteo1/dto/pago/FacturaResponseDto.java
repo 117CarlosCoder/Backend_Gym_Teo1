@@ -36,6 +36,15 @@ public class FacturaResponseDto {
     @Schema(description = "Monto de la factura", example = "250.00")
     private BigDecimal monto;
 
+    @Schema(description = "Precio base del plan", example = "250.00")
+    private BigDecimal montoBase;
+
+    @Schema(description = "Descuento aplicado", example = "25.00")
+    private BigDecimal descuento;
+
+    @Schema(description = "Recargo por pago tardío", example = "0.00")
+    private BigDecimal recargo;
+
     @Schema(description = "Fecha de emisión de la factura", example = "2026-10-08")
     private LocalDate fechaEmision;
 

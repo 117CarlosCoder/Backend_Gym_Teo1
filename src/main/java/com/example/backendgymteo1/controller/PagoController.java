@@ -1,6 +1,7 @@
 package com.example.backendgymteo1.controller;
 
 import com.example.backendgymteo1.config.security.CurrentUser;
+import com.example.backendgymteo1.dto.pago.CotizacionPagoDto;
 import com.example.backendgymteo1.dto.pago.CreatePagoDto;
 import com.example.backendgymteo1.dto.pago.MetodoPagoResponseDto;
 import com.example.backendgymteo1.dto.pago.PagoResponseDto;
@@ -34,6 +35,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.web.bind.annotation.RequestParam;
+
+import java.time.LocalDate;
 import java.util.List;
 
 @Tag(name = "Pagos", description = "Operaciones para el registro de pagos, historial por socio y descarga de comprobantes PDF")
@@ -63,9 +68,10 @@ public class PagoController {
         return ResponseEntity.status(HttpStatus.CREATED).body(pagoService.registrarPago(request, currentUser));
     }
 
-    @Operation(summary = "Consultar historial de pagos por socio", description = "Retorna la lista paginada de comprobantes de pago pertenecientes a un socio.")
+    @Operation(summary = "Consultar historial de pagos por socio", description = "Retorna la lista paginada de comprobantes de pago pertenecientes a un socio. Admite filtros opcionales por rango de fechas (fechaDesde/fechaHasta, formato yyyy-MM-dd, inclusivos) y por método de pago. Un CLIENTE solo puede consultar su propio historial.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Historial de pagos obtenido exitosamente"),
+            @ApiResponse(responseCode = "400", description = "Rango de fechas inválido", content = @Content),
             @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
             @ApiResponse(responseCode = "403", description = "Acceso denegado", content = @Content)
     })
@@ -73,10 +79,45 @@ public class PagoController {
     @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA', 'CLIENTE')")
     public ResponseEntity<Page<PagoResponseDto>> obtenerHistorialPagosPorSocio(
             @PathVariable Integer socioId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaDesde,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaHasta,
+            @RequestParam(required = false) Integer idMetodoPago,
             @PageableDefault(size = 10, sort = "fechaPago") Pageable pageable,
             @CurrentUser User currentUser) {
         verificarAccesoSocio(socioId, currentUser);
-        return ResponseEntity.ok(pagoService.obtenerHistorialPagosPorSocio(socioId, pageable));
+        return ResponseEntity.ok(pagoService.buscarHistorialPagos(socioId, fechaDesde, fechaHasta, idMetodoPago, pageable));
+    }
+
+    @Operation(summary = "Consultar historial general de pagos", description = "Retorna el historial paginado de todos los pagos del gimnasio, con filtros opcionales por socio (idSocio), rango de fechas (fechaDesde/fechaHasta, yyyy-MM-dd) y método de pago. Requiere rol ADMIN o RECEPCIONISTA.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Historial de pagos obtenido exitosamente"),
+            @ApiResponse(responseCode = "400", description = "Rango de fechas inválido", content = @Content),
+            @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
+            @ApiResponse(responseCode = "403", description = "Acceso denegado (Requiere ADMIN o RECEPCIONISTA)", content = @Content)
+    })
+    @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
+    public ResponseEntity<Page<PagoResponseDto>> buscarHistorialPagos(
+            @RequestParam(required = false) Integer idSocio,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaDesde,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaHasta,
+            @RequestParam(required = false) Integer idMetodoPago,
+            @PageableDefault(size = 10, sort = "fechaPago") Pageable pageable) {
+        return ResponseEntity.ok(pagoService.buscarHistorialPagos(idSocio, fechaDesde, fechaHasta, idMetodoPago, pageable));
+    }
+
+    @Operation(summary = "Cotizar el pago de una membresía", description = "Calcula el total a pagar: precio del plan, menos el mejor descuento de las promociones vigentes, más el recargo por pago tardío si la membresía ya venció. El mismo cálculo se aplica al registrar el pago. Requiere rol ADMIN o RECEPCIONISTA.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Cotización calculada",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = CotizacionPagoDto.class))),
+            @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),
+            @ApiResponse(responseCode = "403", description = "Acceso denegado (Requiere ADMIN o RECEPCIONISTA)", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Membresía no encontrada", content = @Content)
+    })
+    @GetMapping("/cotizacion/{idMembresia}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
+    public ResponseEntity<CotizacionPagoDto> cotizarPago(@PathVariable Integer idMembresia) {
+        return ResponseEntity.ok(pagoService.cotizarPago(idMembresia));
     }
 
     @Operation(summary = "Obtener detalle de pago por ID", description = "Retorna el comprobante y detalle completo de la transacción.")
