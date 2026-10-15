@@ -12,6 +12,8 @@ import java.util.Optional;
 @Repository
 public interface FacturaRepository extends JpaRepository<Factura, Integer> {
 
+    boolean existsByIdPromocion(Integer idPromocion);
+
     @Query("SELECT f FROM Factura f " +
             "JOIN FETCH f.membresia m " +
             "JOIN FETCH m.socio s " +

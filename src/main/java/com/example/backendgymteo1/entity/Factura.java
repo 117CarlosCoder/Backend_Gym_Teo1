@@ -49,6 +49,17 @@ public class Factura {
     @Column(name = "id_promocion")
     private Integer idPromocion;
 
+    @Column(name = "monto_base", precision = 10, scale = 2)
+    private BigDecimal montoBase;
+
+    @Builder.Default
+    @Column(name = "descuento", nullable = false, precision = 10, scale = 2)
+    private BigDecimal descuento = BigDecimal.ZERO;
+
+    @Builder.Default
+    @Column(name = "recargo", nullable = false, precision = 10, scale = 2)
+    private BigDecimal recargo = BigDecimal.ZERO;
+
     @Column(name = "monto", nullable = false, precision = 10, scale = 2)
     private BigDecimal monto;
 

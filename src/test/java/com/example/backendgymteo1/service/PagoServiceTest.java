@@ -21,6 +21,19 @@ import com.example.backendgymteo1.repository.FacturaRepository;
 import com.example.backendgymteo1.repository.MembresiaRepository;
 import com.example.backendgymteo1.repository.MetodoPagoRepository;
 import com.example.backendgymteo1.repository.RecepcionistaRepository;
+import com.example.backendgymteo1.repository.PromocionRepository;
+import com.example.backendgymteo1.dto.pago.CotizacionPagoDto;
+import com.example.backendgymteo1.entity.Promocion;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import java.time.LocalDateTime;
+import java.util.List;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.mockito.Mockito.never;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -71,6 +84,15 @@ class PagoServiceTest {
     @Mock
     private AuditoriaService auditoriaService;
 
+    @Mock
+    private PromocionRepository promocionRepository;
+
+    @Mock
+    private ConfiguracionSistemaService configuracionSistemaService;
+
+    @Mock
+    private AvisoPagoService avisoPagoService;
+
     @InjectMocks
     private PagoService pagoService;
 
@@ -83,6 +105,8 @@ class PagoServiceTest {
 
     @BeforeEach
     void setUp() {
+        org.mockito.Mockito.lenient().when(configuracionSistemaService.obtenerRecargoTardioPorcentaje())
+                .thenReturn(new BigDecimal("10.00"));
         recepcionistaUser = User.builder()
                 .id(2)
                 .correo("recepcion@gym.com")
@@ -222,7 +246,7 @@ class PagoServiceTest {
         CreatePagoDto request = CreatePagoDto.builder()
                 .idMembresia(15)
                 .idMetodoPago(1)
-                .monto(new BigDecimal("650.00"))
+                .monto(new BigDecimal("715.00"))
                 .referencia("TRANS-TRIMESTRAL")
                 .build();
 
@@ -302,5 +326,223 @@ class PagoServiceTest {
 
         Membresia membresiaGuardada = membresiaCaptor.getValue();
         assertEquals(vencimientoEsperadoCalculado, membresiaGuardada.getFechaVencimiento());
+    }
+
+    // ---------------------------------------------------------------------
+    // Descuentos, recargo por pago tardío e historial
+    // ---------------------------------------------------------------------
+
+    private Membresia membresiaConPlan(int id, String precio, LocalDate vencimiento) {
+        PlanMembresia plan = PlanMembresia.builder()
+                .id(1).nombre("Plan Mensual").duracion(30).precio(new BigDecimal(precio)).build();
+        return Membresia.builder()
+                .id(id).socio(socioEntity).plan(plan).estadoMembresia(estadoActiva)
+                .fechaInicio(LocalDate.now().minusDays(30)).fechaVencimiento(vencimiento).build();
+    }
+
+    private Promocion promocion(int id, Promocion.TipoDescuento tipo, String valor) {
+        return Promocion.builder()
+                .id(id).nombre("Promo " + id).tipoDescuento(tipo).valorDescuento(new BigDecimal(valor))
+                .fechaInicio(LocalDate.now().minusDays(1)).fechaFin(LocalDate.now().plusDays(1)).activo(true).build();
+    }
+
+    @Test
+    @DisplayName("Cotización sin promoción y membresía vigente: total igual al precio del plan")
+    void testCotizacion_SinPromocionNiRecargo() {
+        Membresia m = membresiaConPlan(1, "250.00", LocalDate.now().plusDays(3));
+        when(promocionRepository.findVigentes(any(LocalDate.class))).thenReturn(List.of());
+
+        CotizacionPagoDto c = pagoService.calcularCotizacion(m, LocalDate.now());
+
+        assertEquals(new BigDecimal("250.00"), c.getMontoBase());
+        assertEquals(new BigDecimal("0.00"), c.getDescuento());
+        assertEquals(new BigDecimal("0.00"), c.getRecargo());
+        assertEquals(new BigDecimal("250.00"), c.getTotal());
+        assertFalse(c.isPagoTardio());
+        assertNull(c.getIdPromocion());
+    }
+
+    @Test
+    @DisplayName("Cotización con promoción porcentual aplica el descuento")
+    void testCotizacion_PromocionPorcentaje() {
+        Membresia m = membresiaConPlan(1, "250.00", LocalDate.now().plusDays(3));
+        when(promocionRepository.findVigentes(any(LocalDate.class)))
+                .thenReturn(List.of(promocion(7, Promocion.TipoDescuento.PORCENTAJE, "20")));
+
+        CotizacionPagoDto c = pagoService.calcularCotizacion(m, LocalDate.now());
+
+        assertEquals(new BigDecimal("50.00"), c.getDescuento());
+        assertEquals(new BigDecimal("200.00"), c.getTotal());
+        assertEquals(7, c.getIdPromocion());
+    }
+
+    @Test
+    @DisplayName("Con varias promociones vigentes se aplica la que otorga mayor descuento (sin acumular)")
+    void testCotizacion_ElijeMejorPromocion() {
+        Membresia m = membresiaConPlan(1, "250.00", LocalDate.now().plusDays(3));
+        when(promocionRepository.findVigentes(any(LocalDate.class))).thenReturn(List.of(
+                promocion(1, Promocion.TipoDescuento.PORCENTAJE, "10"),   // 25.00
+                promocion(2, Promocion.TipoDescuento.MONTO_FIJO, "40"),   // 40.00
+                promocion(3, Promocion.TipoDescuento.PORCENTAJE, "5")));  // 12.50
+
+        CotizacionPagoDto c = pagoService.calcularCotizacion(m, LocalDate.now());
+
+        assertEquals(2, c.getIdPromocion());
+        assertEquals(new BigDecimal("40.00"), c.getDescuento());
+        assertEquals(new BigDecimal("210.00"), c.getTotal());
+    }
+
+    @Test
+    @DisplayName("Un descuento del 100% deja el total en el mínimo Q 0.01 (restricción de la base de datos)")
+    void testCotizacion_DescuentoTotalNoDejaTotalEnCero() {
+        Membresia m = membresiaConPlan(1, "250.00", LocalDate.now().plusDays(3));
+        when(promocionRepository.findVigentes(any(LocalDate.class)))
+                .thenReturn(List.of(promocion(1, Promocion.TipoDescuento.PORCENTAJE, "100")));
+
+        CotizacionPagoDto c = pagoService.calcularCotizacion(m, LocalDate.now());
+
+        assertEquals(new BigDecimal("0.01"), c.getTotal());
+    }
+
+    @Test
+    @DisplayName("Membresía vencida: recargo del 10% sobre el precio del plan y días de atraso")
+    void testCotizacion_RecargoPagoTardio() {
+        Membresia m = membresiaConPlan(1, "250.00", LocalDate.now().minusDays(4));
+        when(promocionRepository.findVigentes(any(LocalDate.class))).thenReturn(List.of());
+
+        CotizacionPagoDto c = pagoService.calcularCotizacion(m, LocalDate.now());
+
+        assertTrue(c.isPagoTardio());
+        assertEquals(4, c.getDiasAtraso());
+        assertEquals(new BigDecimal("25.00"), c.getRecargo());
+        assertEquals(new BigDecimal("275.00"), c.getTotal());
+    }
+
+    @Test
+    @DisplayName("Vencimiento exactamente hoy NO es pago tardío")
+    void testCotizacion_VencimientoHoyNoEsTardio() {
+        Membresia m = membresiaConPlan(1, "250.00", LocalDate.now());
+        when(promocionRepository.findVigentes(any(LocalDate.class))).thenReturn(List.of());
+
+        CotizacionPagoDto c = pagoService.calcularCotizacion(m, LocalDate.now());
+
+        assertFalse(c.isPagoTardio());
+        assertEquals(new BigDecimal("0.00"), c.getRecargo());
+    }
+
+    @Test
+    @DisplayName("Descuento y recargo combinados: base - descuento + recargo (recargo sobre el precio base)")
+    void testCotizacion_DescuentoYRecargo() {
+        Membresia m = membresiaConPlan(1, "250.00", LocalDate.now().minusDays(1));
+        when(promocionRepository.findVigentes(any(LocalDate.class)))
+                .thenReturn(List.of(promocion(1, Promocion.TipoDescuento.MONTO_FIJO, "50")));
+
+        CotizacionPagoDto c = pagoService.calcularCotizacion(m, LocalDate.now());
+
+        assertEquals(new BigDecimal("250.00"), c.getMontoBase());
+        assertEquals(new BigDecimal("50.00"), c.getDescuento());
+        assertEquals(new BigDecimal("25.00"), c.getRecargo());
+        assertEquals(new BigDecimal("225.00"), c.getTotal());
+    }
+
+    @Test
+    @DisplayName("Registrar pago con promoción y recargo guarda el desglose en la factura")
+    void testRegistrarPago_GuardaDesgloseEnFactura() {
+        Membresia m = membresiaConPlan(30, "250.00", LocalDate.now().minusDays(2));
+        when(membresiaRepository.findByIdWithDetails(30)).thenReturn(Optional.of(m));
+        when(metodoPagoRepository.findById(1)).thenReturn(Optional.of(metodoEfectivo));
+        when(promocionRepository.findVigentes(any(LocalDate.class)))
+                .thenReturn(List.of(promocion(9, Promocion.TipoDescuento.MONTO_FIJO, "50")));
+        when(recepcionistaRepository.findById(2)).thenReturn(Optional.of(recepcionistaEntity));
+        when(estadoFacturaRepository.findById(2)).thenReturn(Optional.of(estadoPagada));
+        when(facturaRepository.save(any(Factura.class))).thenAnswer(i -> i.getArgument(0));
+        when(comprobantePagoRepository.save(any(ComprobantePago.class))).thenAnswer(i -> i.getArgument(0));
+        when(estadoMembresiaRepository.findById(1)).thenReturn(Optional.of(estadoActiva));
+        when(pagoMapper.toPagoDto(any(ComprobantePago.class))).thenReturn(PagoResponseDto.builder().build());
+
+        CreatePagoDto request = CreatePagoDto.builder()
+                .idMembresia(30).idMetodoPago(1).monto(new BigDecimal("225.00")).build();
+
+        pagoService.registrarPago(request, recepcionistaUser);
+
+        ArgumentCaptor<Factura> captor = ArgumentCaptor.forClass(Factura.class);
+        verify(facturaRepository).save(captor.capture());
+        Factura f = captor.getValue();
+        assertEquals(new BigDecimal("250.00"), f.getMontoBase());
+        assertEquals(new BigDecimal("50.00"), f.getDescuento());
+        assertEquals(new BigDecimal("25.00"), f.getRecargo());
+        assertEquals(new BigDecimal("225.00"), f.getMonto());
+        assertEquals(9, f.getIdPromocion());
+        verify(avisoPagoService).registrar(eq(f), any(CotizacionPagoDto.class));
+    }
+
+    @Test
+    @DisplayName("Registrar pago con monto menor al total (con recargo) es rechazado y no persiste nada")
+    void testRegistrarPago_MontoInsuficienteConRecargo() {
+        Membresia m = membresiaConPlan(31, "250.00", LocalDate.now().minusDays(2));
+        when(membresiaRepository.findByIdWithDetails(31)).thenReturn(Optional.of(m));
+        when(metodoPagoRepository.findById(1)).thenReturn(Optional.of(metodoEfectivo));
+        when(promocionRepository.findVigentes(any(LocalDate.class))).thenReturn(List.of());
+
+        CreatePagoDto request = CreatePagoDto.builder()
+                .idMembresia(31).idMetodoPago(1).monto(new BigDecimal("250.00")).build();
+
+        RuntimeException ex = assertThrows(RuntimeException.class,
+                () -> pagoService.registrarPago(request, recepcionistaUser));
+
+        assertTrue(ex.getMessage().contains("275.00"));
+        verify(facturaRepository, never()).save(any(Factura.class));
+        verify(membresiaRepository, never()).save(any(Membresia.class));
+        org.mockito.Mockito.verifyNoInteractions(avisoPagoService);
+    }
+
+    @Test
+    @DisplayName("La validación del total aplica también a pagos que no son en efectivo")
+    void testRegistrarPago_MontoInsuficienteTarjeta() {
+        Membresia m = membresiaConPlan(32, "250.00", LocalDate.now().plusDays(5));
+        MetodoPago tarjeta = MetodoPago.builder().id(2).nombre("TARJETA").build();
+        when(membresiaRepository.findByIdWithDetails(32)).thenReturn(Optional.of(m));
+        when(metodoPagoRepository.findById(2)).thenReturn(Optional.of(tarjeta));
+        when(promocionRepository.findVigentes(any(LocalDate.class))).thenReturn(List.of());
+
+        CreatePagoDto request = CreatePagoDto.builder()
+                .idMembresia(32).idMetodoPago(2).monto(new BigDecimal("100.00")).build();
+
+        assertThrows(RuntimeException.class, () -> pagoService.registrarPago(request, recepcionistaUser));
+        verify(facturaRepository, never()).save(any(Factura.class));
+    }
+
+    @Test
+    @DisplayName("Historial: rango de fechas invertido es rechazado")
+    void testHistorial_RangoInvalido() {
+        assertThrows(RuntimeException.class, () -> pagoService.buscarHistorialPagos(
+                null, LocalDate.of(2026, 10, 10), LocalDate.of(2026, 10, 1), null, PageRequest.of(0, 10)));
+    }
+
+    @Test
+    @DisplayName("Historial: fechaHasta se convierte en límite exclusivo del día siguiente para incluir todo el día")
+    void testHistorial_ConvierteRangoDeFechas() {
+        when(comprobantePagoRepository.buscarHistorial(any(), any(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        Page<PagoResponseDto> result = pagoService.buscarHistorialPagos(
+                4, LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 31), 1, PageRequest.of(0, 10));
+
+        assertNotNull(result);
+        verify(comprobantePagoRepository).buscarHistorial(eq(4),
+                eq(LocalDateTime.of(2026, 10, 1, 0, 0)),
+                eq(LocalDateTime.of(2026, 11, 1, 0, 0)),
+                eq(1), any());
+    }
+
+    @Test
+    @DisplayName("Historial sin filtros delega con parámetros nulos")
+    void testHistorial_SinFiltros() {
+        when(comprobantePagoRepository.buscarHistorial(any(), any(), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        pagoService.buscarHistorialPagos(null, null, null, null, PageRequest.of(0, 10));
+
+        verify(comprobantePagoRepository).buscarHistorial(eq(null), eq(null), eq(null), eq(null), any());
     }
 }
