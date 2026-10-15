@@ -67,4 +67,26 @@ public interface SocioRepository extends JpaRepository<Socio, Integer> {
     @Modifying
     @Query("UPDATE Socio s SET s.activo = false, s.eliminadoEn = :now WHERE s.id = :id AND s.eliminadoEn IS NULL")
     int softDeleteSocio(@Param("id") Integer id, @Param("now") LocalDateTime now);
+
+    @Query("SELECT COUNT(DISTINCT s) FROM Socio s JOIN s.usuario u WHERE s.activo = true AND s.eliminadoEn IS NULL AND u.estado = true AND u.eliminadoEn IS NULL")
+    long countTotalSociosActivos();
+
+    @Query("SELECT COUNT(DISTINCT s) FROM Socio s JOIN s.usuario u " +
+           "WHERE s.activo = true AND s.eliminadoEn IS NULL AND u.estado = true AND u.eliminadoEn IS NULL AND s.id IN " +
+           "(SELECT m.socio.id FROM Membresia m WHERE m.estadoMembresia.id = 1 AND m.fechaVencimiento >= :fechaActual)")
+    long countSociosConMembresiaActiva(@Param("fechaActual") LocalDate fechaActual);
+
+    @Query("SELECT COUNT(DISTINCT s) FROM Socio s JOIN s.usuario u " +
+           "WHERE s.activo = true AND s.eliminadoEn IS NULL AND u.estado = true AND u.eliminadoEn IS NULL AND s.id NOT IN " +
+           "(SELECT m.socio.id FROM Membresia m WHERE m.estadoMembresia.id = 1 AND m.fechaVencimiento >= :fechaActual)")
+    long countSociosMorosos(@Param("fechaActual") LocalDate fechaActual);
+
+    @Query("SELECT suc.id, suc.nombre, " +
+           "SUM(CASE WHEN s.id IN (SELECT m.socio.id FROM Membresia m WHERE m.estadoMembresia.id = 1 AND m.fechaVencimiento >= :fechaActual) THEN 1L ELSE 0L END), " +
+           "SUM(CASE WHEN s.id NOT IN (SELECT m.socio.id FROM Membresia m WHERE m.estadoMembresia.id = 1 AND m.fechaVencimiento >= :fechaActual) THEN 1L ELSE 0L END), " +
+           "COUNT(s) " +
+           "FROM Socio s JOIN s.usuario u LEFT JOIN s.sucursal suc " +
+           "WHERE s.activo = true AND s.eliminadoEn IS NULL AND u.estado = true AND u.eliminadoEn IS NULL " +
+           "GROUP BY suc.id, suc.nombre")
+    List<Object[]> countSociosPorSucursalYEstado(@Param("fechaActual") LocalDate fechaActual);
 }
