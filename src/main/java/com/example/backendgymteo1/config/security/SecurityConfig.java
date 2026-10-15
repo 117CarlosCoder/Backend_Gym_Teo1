@@ -33,9 +33,17 @@ public class SecurityConfig {
                                                 .authenticationEntryPoint(jwtAuthenticationEntryPoint))
                                 .authorizeHttpRequests(auth -> auth
                                                 .requestMatchers("/auth/**", "/roles/**").permitAll()
-                                                .requestMatchers("/v3/api-docs/**", "/swagger-ui/**",
-                                                                "/swagger-ui.html")
-                                                .permitAll()
+                                                .requestMatchers(
+                                                                "/v3/api-docs",
+                                                                "/v3/api-docs/**",
+                                                                "/v3/api-docs.yaml",
+                                                                "/swagger-ui",
+                                                                "/swagger-ui/**",
+                                                                "/swagger-ui.html",
+                                                                "/swagger-resources",
+                                                                "/swagger-resources/**",
+                                                                "/webjars/**"
+                                                ).permitAll()
                                                 .anyRequest().authenticated())
                                 .sessionManagement(session -> session
                                                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
