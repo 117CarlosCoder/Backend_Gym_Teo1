@@ -34,6 +34,9 @@ public class SwaggerConfig {
             "Planes de Membresía",
             "Membresías",
             "Asistencias",
+            "Pagos",
+            "Promociones",
+            "Configuración",
             "Notificaciones"
     );
 
@@ -58,6 +61,9 @@ public class SwaggerConfig {
                         new Tag().name("Planes de Membresía").description("Operaciones CRUD para la consulta, creación, actualización y eliminación de planes y tarifas del gimnasio"),
                         new Tag().name("Membresías").description("Operaciones para la emisión, consulta y gestión de membresías multisucursal"),
                         new Tag().name("Asistencias").description("Operaciones de control y registro de asistencia al gimnasio"),
+                        new Tag().name("Pagos").description("Registro de pagos, cotización con descuentos y recargos, historial y comprobantes PDF"),
+                        new Tag().name("Promociones").description("Gestión de promociones de descuento aplicadas automáticamente a los pagos"),
+                        new Tag().name("Configuración").description("Parámetros del sistema modificables por el administrador (ej. recargo por pago tardío)"),
                         new Tag().name("Notificaciones").description("Endpoints para la bandeja de notificaciones persistente del cliente autenticado")
                 ))
                 .addSecurityItem(new SecurityRequirement().addList(SECURITY_SCHEME_NAME))

@@ -67,6 +67,14 @@ public class EmailService {
         }
     }
 
+    public void enviarAvisoRecargo(String destinatario, String titulo, String mensaje) {
+        String html = "<div style=\"font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:20px\">"
+                + "<h2>" + HtmlUtils.htmlEscape(titulo) + "</h2>"
+                + "<p>" + HtmlUtils.htmlEscape(mensaje) + "</p>"
+                + "<p>Puedes consultar el detalle del pago en tu historial y en tus notificaciones.</p></div>";
+        enviarCorreo(destinatario, titulo + " - Gimnasio", html);
+    }
+
     public void enviarCredenciales(String destinatario, String nombreCompleto, String contraseniaTemporal, String rol) {
         if (apiKey == null || apiKey.isBlank()) {
             log.warn("Resend API Key no configurada. Credenciales generadas para {} (Rol: {}): [{}]",

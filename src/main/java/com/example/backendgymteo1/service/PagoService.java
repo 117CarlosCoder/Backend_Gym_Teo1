@@ -10,9 +10,12 @@ import com.example.backendgymteo1.entity.Factura;
 import com.example.backendgymteo1.entity.Membresia;
 import com.example.backendgymteo1.entity.MetodoPago;
 import com.example.backendgymteo1.entity.PlanMembresia;
+import com.example.backendgymteo1.entity.Promocion;
 import com.example.backendgymteo1.entity.Recepcionista;
 import com.example.backendgymteo1.entity.User;
+import com.example.backendgymteo1.dto.pago.CotizacionPagoDto;
 import com.example.backendgymteo1.exception.ResourceNotFoundException;
+import com.example.backendgymteo1.repository.PromocionRepository;
 import com.example.backendgymteo1.mapper.PagoMapper;
 import com.example.backendgymteo1.repository.ComprobantePagoRepository;
 import com.example.backendgymteo1.repository.EstadoFacturaRepository;
@@ -29,8 +32,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
 import java.util.List;
 
 
@@ -49,6 +55,59 @@ public class PagoService {
     private final RecepcionistaRepository recepcionistaRepository;
     private final PagoMapper pagoMapper;
     private final AuditoriaService auditoriaService;
+    private final PromocionRepository promocionRepository;
+    private final ConfiguracionSistemaService configuracionSistemaService;
+    private final AvisoPagoService avisoPagoService;
+
+    private static final BigDecimal MONTO_MINIMO = new BigDecimal("0.01");
+
+    public CotizacionPagoDto calcularCotizacion(Membresia membresia, LocalDate hoy) {
+        BigDecimal base = (membresia.getPlan() != null && membresia.getPlan().getPrecio() != null)
+                ? membresia.getPlan().getPrecio().setScale(2, RoundingMode.HALF_UP)
+                : BigDecimal.ZERO.setScale(2);
+
+        Promocion mejorPromocion = promocionRepository.findVigentes(hoy).stream()
+                .max(Comparator.comparing(p -> p.calcularDescuento(base)))
+                .orElse(null);
+
+        BigDecimal descuento = BigDecimal.ZERO.setScale(2);
+        if (mejorPromocion != null) {
+            // El total nunca puede quedar por debajo de MONTO_MINIMO (restricción chk_monto_factura)
+            descuento = mejorPromocion.calcularDescuento(base)
+                    .min(base.subtract(MONTO_MINIMO).max(BigDecimal.ZERO));
+        }
+
+        LocalDate vencimiento = membresia.getFechaVencimiento();
+        boolean tardio = vencimiento != null && vencimiento.isBefore(hoy);
+        long diasAtraso = tardio ? ChronoUnit.DAYS.between(vencimiento, hoy) : 0;
+        // Porcentaje configurable por el ADMIN (tabla configuracion_sistema)
+        BigDecimal porcentajeRecargo = configuracionSistemaService.obtenerRecargoTardioPorcentaje();
+        BigDecimal recargo = tardio
+                ? base.multiply(porcentajeRecargo).divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP)
+                : BigDecimal.ZERO.setScale(2);
+
+        BigDecimal total = base.subtract(descuento).add(recargo);
+
+        return CotizacionPagoDto.builder()
+                .idMembresia(membresia.getId())
+                .montoBase(base)
+                .idPromocion(descuento.signum() > 0 ? mejorPromocion.getId() : null)
+                .nombrePromocion(descuento.signum() > 0 ? mejorPromocion.getNombre() : null)
+                .descuento(descuento)
+                .pagoTardio(tardio)
+                .diasAtraso(diasAtraso)
+                .porcentajeRecargo(porcentajeRecargo)
+                .recargo(recargo)
+                .total(total)
+                .fechaCalculo(hoy)
+                .build();
+    }
+
+    public CotizacionPagoDto cotizarPago(Integer idMembresia) {
+        Membresia membresia = membresiaRepository.findByIdWithDetails(idMembresia)
+                .orElseThrow(() -> new ResourceNotFoundException("Membresía no encontrada con ID: " + idMembresia));
+        return calcularCotizacion(membresia, LocalDate.now());
+    }
 
     @Transactional(rollbackFor = Exception.class)
     public PagoResponseDto registrarPago(CreatePagoDto request, User usuarioActual) {
@@ -65,14 +124,10 @@ public class PagoService {
         MetodoPago metodoPago = metodoPagoRepository.findById(request.getIdMetodoPago())
                 .orElseThrow(() -> new ResourceNotFoundException("Método de pago no encontrado con ID: " + request.getIdMetodoPago()));
 
-        if (metodoPago.getNombre() != null && "EFECTIVO".equalsIgnoreCase(metodoPago.getNombre().trim())) {
-            BigDecimal costoPlan = (membresia.getPlan() != null && membresia.getPlan().getPrecio() != null)
-                    ? membresia.getPlan().getPrecio()
-                    : BigDecimal.ZERO;
+        CotizacionPagoDto cotizacion = calcularCotizacion(membresia, LocalDate.now());
 
-            if (request.getMonto() == null || request.getMonto().compareTo(costoPlan) < 0) {
-                throw new RuntimeException(String.format("Disculpe pero su deuda es de Q. %.2f", costoPlan));
-            }
+        if (request.getMonto() == null || request.getMonto().compareTo(cotizacion.getTotal()) < 0) {
+            throw new RuntimeException(String.format("Disculpe pero su deuda es de Q. %.2f", cotizacion.getTotal()));
         }
 
 
@@ -93,7 +148,11 @@ public class PagoService {
                 .membresia(membresia)
                 .recepcionista(recepcionista)
                 .estadoFactura(estadoPagada)
-                .monto(request.getMonto())
+                .idPromocion(cotizacion.getIdPromocion())
+                .montoBase(cotizacion.getMontoBase())
+                .descuento(cotizacion.getDescuento())
+                .recargo(cotizacion.getRecargo())
+                .monto(cotizacion.getTotal())
                 .fechaEmision(LocalDate.now())
                 .fechaVencimiento(LocalDate.now())
                 .observacion(request.getObservacion() != null ? request.getObservacion() : "Pago de membresía")
@@ -135,12 +194,26 @@ public class PagoService {
                         comprobante.getId(), request.getMonto(), request.getReferencia(), membresia.getId(), nuevaFechaVencimiento)
         );
 
+        avisoPagoService.registrar(factura, cotizacion);
         return pagoMapper.toPagoDto(comprobante);
     }
 
     public Page<PagoResponseDto> obtenerHistorialPagosPorSocio(Integer socioId, Pageable pageable) {
         Pageable sanitizedPageable = sanitizePageable(pageable, "fechaPago");
         return comprobantePagoRepository.findBySocioIdPaged(socioId, sanitizedPageable)
+                .map(pagoMapper::toPagoDto);
+    }
+
+    public Page<PagoResponseDto> buscarHistorialPagos(Integer socioId, LocalDate fechaDesde, LocalDate fechaHasta,
+                                                      Integer idMetodoPago, Pageable pageable) {
+        if (fechaDesde != null && fechaHasta != null && fechaHasta.isBefore(fechaDesde)) {
+            throw new RuntimeException("La fecha final no puede ser anterior a la fecha inicial");
+        }
+        LocalDateTime desde = fechaDesde != null ? fechaDesde.atStartOfDay() : null;
+        LocalDateTime hastaExclusivo = fechaHasta != null ? fechaHasta.plusDays(1).atStartOfDay() : null;
+        Pageable sanitizedPageable = sanitizePageable(pageable, "fechaPago");
+        return comprobantePagoRepository
+                .buscarHistorial(socioId, desde, hastaExclusivo, idMetodoPago, sanitizedPageable)
                 .map(pagoMapper::toPagoDto);
     }
 

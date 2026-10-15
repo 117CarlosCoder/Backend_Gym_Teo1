@@ -58,6 +58,18 @@ public class PagoResponseDto {
     @Schema(description = "Monto total pagado", example = "250.00")
     private BigDecimal montoPagado;
 
+    @Schema(description = "Precio base del plan al momento del pago", example = "250.00")
+    private BigDecimal montoBase;
+
+    @Schema(description = "Descuento aplicado por promoción", example = "25.00")
+    private BigDecimal descuento;
+
+    @Schema(description = "Recargo aplicado por pago tardío", example = "0.00")
+    private BigDecimal recargo;
+
+    @Schema(description = "ID de la promoción aplicada", example = "1")
+    private Integer idPromocion;
+
     @Schema(description = "Referencia o voucher del pago", example = "REF-12345")
     private String referencia;
 

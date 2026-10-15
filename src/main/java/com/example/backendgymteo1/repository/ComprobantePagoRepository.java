@@ -49,6 +49,23 @@ public interface ComprobantePagoRepository extends JpaRepository<ComprobantePago
             countQuery = "SELECT COUNT(c) FROM ComprobantePago c WHERE c.factura.membresia.socio.id = :socioId")
     Page<ComprobantePago> findBySocioIdPaged(@Param("socioId") Integer socioId, Pageable pageable);
 
+    @EntityGraph(attributePaths = {"factura", "factura.membresia", "factura.membresia.socio", "factura.membresia.socio.usuario", "factura.membresia.plan", "factura.recepcionista", "factura.recepcionista.usuario", "metodoPago"})
+    @Query(value = "SELECT c FROM ComprobantePago c " +
+            "WHERE (:socioId IS NULL OR c.factura.membresia.socio.id = :socioId) " +
+            "AND (:desde IS NULL OR c.fechaPago >= :desde) " +
+            "AND (:hastaExclusivo IS NULL OR c.fechaPago < :hastaExclusivo) " +
+            "AND (:idMetodoPago IS NULL OR c.metodoPago.id = :idMetodoPago)",
+            countQuery = "SELECT COUNT(c) FROM ComprobantePago c " +
+                    "WHERE (:socioId IS NULL OR c.factura.membresia.socio.id = :socioId) " +
+                    "AND (:desde IS NULL OR c.fechaPago >= :desde) " +
+                    "AND (:hastaExclusivo IS NULL OR c.fechaPago < :hastaExclusivo) " +
+                    "AND (:idMetodoPago IS NULL OR c.metodoPago.id = :idMetodoPago)")
+    Page<ComprobantePago> buscarHistorial(@Param("socioId") Integer socioId,
+                                          @Param("desde") LocalDateTime desde,
+                                          @Param("hastaExclusivo") LocalDateTime hastaExclusivo,
+                                          @Param("idMetodoPago") Integer idMetodoPago,
+                                          Pageable pageable);
+
     @Query("SELECT YEAR(c.fechaPago), MONTH(c.fechaPago), SUM(c.montoPagado), COUNT(c) " +
             "FROM ComprobantePago c " +
             "WHERE (:anio IS NULL OR YEAR(c.fechaPago) = :anio) " +
