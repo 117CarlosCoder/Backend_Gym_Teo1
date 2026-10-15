@@ -190,4 +190,50 @@ public interface MembresiaRepository extends JpaRepository<Membresia, Integer> {
                         @Param("hoy") LocalDate hoy,
                         @Param("fechaLimite") LocalDate fechaLimite,
                         Pageable pageable);
+
+        @Query("SELECT p.id, p.nombre, COUNT(m) " +
+                        "FROM Membresia m JOIN m.plan p " +
+                        "WHERE m.estadoMembresia.id = 1 AND m.fechaVencimiento >= :fechaActual " +
+                        "GROUP BY p.id, p.nombre " +
+                        "ORDER BY COUNT(m) DESC")
+        List<Object[]> countActiveMembershipsByPlan(@Param("fechaActual") LocalDate fechaActual);
+
+        @Query("SELECT YEAR(m.fechaInicio), MONTH(m.fechaInicio), " +
+                        "SUM(CASE WHEN m.id = (SELECT MIN(m2.id) FROM Membresia m2 WHERE m2.socio.id = m.socio.id) THEN 1L ELSE 0L END), " +
+                        "SUM(CASE WHEN m.id > (SELECT MIN(m2.id) FROM Membresia m2 WHERE m2.socio.id = m.socio.id) THEN 1L ELSE 0L END), " +
+                        "COUNT(m) " +
+                        "FROM Membresia m " +
+                        "WHERE (:anio IS NULL OR YEAR(m.fechaInicio) = :anio) " +
+                        "GROUP BY YEAR(m.fechaInicio), MONTH(m.fechaInicio) " +
+                        "ORDER BY YEAR(m.fechaInicio) DESC, MONTH(m.fechaInicio) DESC")
+        List<Object[]> findRenovacionesPorMes(@Param("anio") Integer anio);
+
+        @Query("SELECT " +
+                        "COUNT(m), " +
+                        "SUM(CASE WHEN m.id = (SELECT MIN(m2.id) FROM Membresia m2 WHERE m2.socio.id = m.socio.id) THEN 1L ELSE 0L END), " +
+                        "SUM(CASE WHEN m.id > (SELECT MIN(m2.id) FROM Membresia m2 WHERE m2.socio.id = m.socio.id) THEN 1L ELSE 0L END) " +
+                        "FROM Membresia m " +
+                        "WHERE (:anio IS NULL OR YEAR(m.fechaInicio) = :anio)")
+        List<Object[]> countTotalesRenovaciones(@Param("anio") Integer anio);
+
+        @Query("SELECT COUNT(m) FROM Membresia m WHERE m.estadoMembresia.id = 1 AND m.fechaVencimiento >= :fechaActual")
+        long countActiveMembershipsTotal(@Param("fechaActual") LocalDate fechaActual);
+
+        @Query("SELECT m FROM Membresia m " +
+                        "JOIN FETCH m.socio s " +
+                        "JOIN FETCH s.usuario u " +
+                        "JOIN FETCH m.plan p " +
+                        "WHERE (:anio IS NULL OR YEAR(m.fechaInicio) = :anio) " +
+                        "ORDER BY m.fechaInicio DESC")
+        List<Membresia> findMembresiasDetalladas(@Param("anio") Integer anio, Pageable pageable);
+
+        @Query("SELECT m.socio.id, MIN(m.id) FROM Membresia m GROUP BY m.socio.id")
+        List<Object[]> findPrimeraMembresiaIdPorSocio();
+
+        @Query("SELECT m FROM Membresia m " +
+                        "JOIN FETCH m.socio s " +
+                        "JOIN FETCH m.plan p " +
+                        "JOIN FETCH m.estadoMembresia e " +
+                        "WHERE m.id IN (SELECT MAX(m2.id) FROM Membresia m2 GROUP BY m2.socio.id)")
+        List<Membresia> findUltimaMembresiaPorSocio();
 }
