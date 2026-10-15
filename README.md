@@ -106,6 +106,7 @@ Configura los siguientes valores según tu entorno:
 | `REMINDER_MAX_ATTEMPTS` | Intentos máximos de reintento de envío de correo | `3` |
 | `REMINDER_RETRY_MINUTES` | Minutos de espera entre reintentos fallidos | `60` |
 | `REMINDER_DISPATCHER_DELAY_MS` | Intervalo del despachador de cola en milisegundos | `60000` |
+| `SWAGGER_SERVER_URL` | URL pública base personalizada para Swagger en producción (opcional) | `https://api.tudominio.com` o vacío (usa ruta relativa `/`) |
 
 ---
 
@@ -159,7 +160,12 @@ La API estará disponible en `http://localhost:8080`.
 Una vez que el backend esté en ejecución, puedes explorar, probar e interactuar con todos los endpoints a través de Swagger UI:
 
 * **Interfaz Interactiva (Swagger UI):**  
-  [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui.html)
+  - **Local:** [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui.html)
+  - **Producción (AWS EC2):** `http://<IP_O_DOMINIO_EC2>:8080/swagger-ui/index.html` (o `https://<DOMINIO>/swagger-ui/index.html`)
+  - **Especificación OpenAPI (JSON):** `http://<IP_O_DOMINIO>:8080/v3/api-docs`
+
+> [!NOTE]
+> En producción, Swagger utiliza servidores con rutas relativas (`/`) y cabeceras reenviadas (`X-Forwarded-*`), por lo que las peticiones se dirigen de forma transparente al dominio o IP de producción sin problemas de CORS ni de resolución de nombres internos.
 
 > **Cómo autenticarse en Swagger:**
 > 1. Haz login en el endpoint `POST /auth/login` con uno de los usuarios de prueba.
