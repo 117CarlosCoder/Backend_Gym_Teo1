@@ -6,6 +6,7 @@ import com.example.backendgymteo1.dto.reporte.MetricaAsistenciaDto;
 import com.example.backendgymteo1.dto.reporte.ReporteIngresosDto;
 import com.example.backendgymteo1.dto.reporte.ReporteMiembrosEstadoDto;
 import com.example.backendgymteo1.dto.reporte.ReporteRenovacionesDto;
+import com.example.backendgymteo1.entity.Rol;
 import com.example.backendgymteo1.entity.User;
 import com.example.backendgymteo1.service.ReporteService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -80,7 +81,7 @@ public class ReporteController {
         return ResponseEntity.ok(reporteService.getReporteRenovaciones(anio));
     }
 
-    @Operation(summary = "Resumen ejecutivo tipo Dashboard", description = "Requiere rol ADMIN o RECEPCIONISTA")
+    @Operation(summary = "Resumen ejecutivo tipo Dashboard", description = "Requiere rol ADMIN o RECEPCIONISTA. Para RECEPCIONISTA los campos de ingresos se devuelven en null.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Indicadores principales consolidados",
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = DashboardResumenDto.class))),
@@ -89,8 +90,17 @@ public class ReporteController {
     })
     @GetMapping("/dashboard")
     @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
-    public ResponseEntity<DashboardResumenDto> getDashboardResumen() {
-        return ResponseEntity.ok(reporteService.getDashboardResumen());
+    public ResponseEntity<DashboardResumenDto> getDashboardResumen(@CurrentUser User currentUser) {
+        DashboardResumenDto resumen = reporteService.getDashboardResumen();
+        // Recepción no tiene acceso a la información financiera: se omiten los ingresos
+        boolean esAdmin = currentUser != null && currentUser.getRol() != null
+                && Rol.ADMIN.equalsIgnoreCase(currentUser.getRol().getNombre());
+        if (!esAdmin) {
+            resumen.setIngresosMesActual(null);
+            resumen.setIngresosMesAnterior(null);
+            resumen.setCrecimientoIngresosPorcentaje(null);
+        }
+        return ResponseEntity.ok(resumen);
     }
 
     @Operation(summary = "Métricas de asistencia según rol del usuario", description = "Retorna métricas de asistencia adaptadas según el rol del usuario autenticado (ADMIN, RECEPCIONISTA o CLIENTE)")

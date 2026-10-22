@@ -195,13 +195,14 @@ public class PagoService {
         );
 
         avisoPagoService.registrar(factura, cotizacion);
-        return pagoMapper.toPagoDto(comprobante);
+        return conNombrePromocion(pagoMapper.toPagoDto(comprobante));
     }
 
     public Page<PagoResponseDto> obtenerHistorialPagosPorSocio(Integer socioId, Pageable pageable) {
         Pageable sanitizedPageable = sanitizePageable(pageable, "fechaPago");
         return comprobantePagoRepository.findBySocioIdPaged(socioId, sanitizedPageable)
-                .map(pagoMapper::toPagoDto);
+                .map(pagoMapper::toPagoDto)
+                .map(this::conNombrePromocion);
     }
 
     public Page<PagoResponseDto> buscarHistorialPagos(Integer socioId, LocalDate fechaDesde, LocalDate fechaHasta,
@@ -214,7 +215,8 @@ public class PagoService {
         Pageable sanitizedPageable = sanitizePageable(pageable, "fechaPago");
         return comprobantePagoRepository
                 .buscarHistorial(socioId, desde, hastaExclusivo, idMetodoPago, sanitizedPageable)
-                .map(pagoMapper::toPagoDto);
+                .map(pagoMapper::toPagoDto)
+                .map(this::conNombrePromocion);
     }
 
     private Pageable sanitizePageable(Pageable pageable, String defaultSortProperty) {
@@ -234,13 +236,24 @@ public class PagoService {
 
     public List<PagoResponseDto> obtenerHistorialPagosPorSocio(Integer socioId) {
         List<ComprobantePago> comprobantes = comprobantePagoRepository.findBySocioIdWithDetails(socioId);
-        return pagoMapper.toPagoDtoList(comprobantes);
+        return pagoMapper.toPagoDtoList(comprobantes).stream()
+                .map(this::conNombrePromocion)
+                .toList();
     }
 
     public PagoResponseDto obtenerPagoPorId(Integer id) {
         ComprobantePago comprobante = comprobantePagoRepository.findByIdWithDetails(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Pago/Comprobante no encontrado con ID: " + id));
-        return pagoMapper.toPagoDto(comprobante);
+        return conNombrePromocion(pagoMapper.toPagoDto(comprobante));
+    }
+
+    /** Agrega el nombre de la promoción aplicada para mostrarlo en el historial y en el comprobante. */
+    private PagoResponseDto conNombrePromocion(PagoResponseDto dto) {
+        if (dto != null && dto.getIdPromocion() != null && dto.getNombrePromocion() == null) {
+            promocionRepository.findById(dto.getIdPromocion())
+                    .ifPresent(promocion -> dto.setNombrePromocion(promocion.getNombre()));
+        }
+        return dto;
     }
 
     public List<MetodoPagoResponseDto> listarMetodosPago() {

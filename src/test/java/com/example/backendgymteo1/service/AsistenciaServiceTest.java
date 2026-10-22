@@ -1,5 +1,6 @@
 package com.example.backendgymteo1.service;
 
+import com.example.backendgymteo1.dto.asistencia.AsistenciaDetalleDto;
 import com.example.backendgymteo1.dto.asistencia.RegistrarAsistenciaDto;
 import com.example.backendgymteo1.dto.asistencia.RegistroAsistenciaResponseDto;
 import com.example.backendgymteo1.dto.socio.SocioResponseDto;
@@ -32,10 +33,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -377,5 +380,93 @@ class AsistenciaServiceTest {
         RuntimeException ex = assertThrows(RuntimeException.class,
                 () -> asistenciaService.registrarEntrada(request, null));
         assertTrue(ex.getMessage().contains("Se requiere un usuario autenticado"));
+    }
+
+    // ---------------- M6: socio dentro del gimnasio y registro de salida ----------------
+
+    @Test
+    @DisplayName("Rechaza una nueva entrada si el socio sigue dentro del gimnasio (entrada sin salida hoy)")
+    void testRegistrarEntrada_ThrowsWhenSocioYaEstaDentro() {
+        RegistrarAsistenciaDto request = RegistrarAsistenciaDto.builder().idSocio(4).sucursalId(1).build();
+        Asistencia abierta = Asistencia.builder()
+                .id(77).socio(socioEntity).sucursal(sucursalCentral)
+                .fecha(LocalDate.now()).horaEntrada(LocalTime.of(7, 15)).build();
+
+        when(socioRepository.findById(4)).thenReturn(Optional.of(socioEntity));
+        when(membresiaRepository.findActiveBySocioId(eq(4), any(LocalDate.class))).thenReturn(Optional.of(membresiaActiva));
+        when(asistenciaRepository.findAbiertasBySocioIdAndFecha(eq(4), any(LocalDate.class))).thenReturn(List.of(abierta));
+
+        RuntimeException ex = assertThrows(RuntimeException.class,
+                () -> asistenciaService.registrarEntrada(request, recepcionistaUser));
+
+        assertTrue(ex.getMessage().contains("ya se encuentra dentro del gimnasio desde las 07:15"));
+        verify(asistenciaRepository, never()).save(any(Asistencia.class));
+    }
+
+    @Test
+    @DisplayName("Registra la salida de un socio que sigue dentro y calcula su permanencia")
+    void testRegistrarSalida_Success() {
+        Asistencia abierta = Asistencia.builder()
+                .id(77).socio(socioEntity).sucursal(sucursalCentral).recepcionista(recepcionistaEntity)
+                .fecha(LocalDate.now().minusDays(1)).horaEntrada(LocalTime.of(18, 0)).build();
+
+        when(asistenciaRepository.findByIdConDetalles(77)).thenReturn(Optional.of(abierta));
+        when(asistenciaRepository.save(any(Asistencia.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        AsistenciaDetalleDto detalle = asistenciaService.registrarSalida(77, recepcionistaUser);
+
+        // La entrada fue ayer: la salida se cierra al final de ese día
+        assertEquals(LocalTime.of(23, 59, 59), detalle.getHoraSalida());
+        assertFalse(detalle.isDentro());
+        assertEquals(359L, detalle.getMinutosPermanencia());
+        assertEquals("Juan", detalle.getNombresSocio());
+        assertEquals("Sucursal Central", detalle.getSucursalNombre());
+        verify(auditoriaService).registrar(eq(recepcionistaUser), eq("asistencia"), eq("UPDATE"), eq(77), anyString());
+    }
+
+    @Test
+    @DisplayName("Rechaza registrar la salida dos veces")
+    void testRegistrarSalida_ThrowsWhenYaRegistrada() {
+        Asistencia cerrada = Asistencia.builder()
+                .id(78).socio(socioEntity).sucursal(sucursalCentral)
+                .fecha(LocalDate.now()).horaEntrada(LocalTime.of(6, 0)).horaSalida(LocalTime.of(7, 30)).build();
+
+        when(asistenciaRepository.findByIdConDetalles(78)).thenReturn(Optional.of(cerrada));
+
+        RuntimeException ex = assertThrows(RuntimeException.class,
+                () -> asistenciaService.registrarSalida(78, recepcionistaUser));
+
+        assertTrue(ex.getMessage().contains("ya fue registrada a las 07:30"));
+        verify(asistenciaRepository, never()).save(any(Asistencia.class));
+    }
+
+    @Test
+    @DisplayName("Rechaza registrar la salida de una asistencia inexistente")
+    void testRegistrarSalida_ThrowsWhenNoExiste() {
+        when(asistenciaRepository.findByIdConDetalles(999)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> asistenciaService.registrarSalida(999, recepcionistaUser));
+    }
+
+    @Test
+    @DisplayName("Lista las asistencias del día indicando quién sigue dentro")
+    void testListarAsistenciasDelDia() {
+        Asistencia dentro = Asistencia.builder()
+                .id(1).socio(socioEntity).sucursal(sucursalCentral)
+                .fecha(LocalDate.now()).horaEntrada(LocalTime.of(9, 0)).build();
+        Asistencia salio = Asistencia.builder()
+                .id(2).socio(socioEntity).sucursal(sucursalCentral)
+                .fecha(LocalDate.now()).horaEntrada(LocalTime.of(6, 0)).horaSalida(LocalTime.of(7, 0)).build();
+
+        when(asistenciaRepository.findUltimasAsistenciasConDetalles(eq(1), eq(LocalDate.now()), any()))
+                .thenReturn(List.of(dentro, salio));
+
+        List<AsistenciaDetalleDto> lista = asistenciaService.listarAsistenciasDelDia(null, 1);
+
+        assertEquals(2, lista.size());
+        assertTrue(lista.get(0).isDentro());
+        assertFalse(lista.get(1).isDentro());
+        assertEquals(60L, lista.get(1).getMinutosPermanencia());
     }
 }
