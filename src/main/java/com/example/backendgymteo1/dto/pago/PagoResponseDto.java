@@ -70,6 +70,9 @@ public class PagoResponseDto {
     @Schema(description = "ID de la promoción aplicada", example = "1")
     private Integer idPromocion;
 
+    @Schema(description = "Nombre de la promoción aplicada como descuento", example = "Promo Estudiantes", nullable = true)
+    private String nombrePromocion;
+
     @Schema(description = "Referencia o voucher del pago", example = "REF-12345")
     private String referencia;
 

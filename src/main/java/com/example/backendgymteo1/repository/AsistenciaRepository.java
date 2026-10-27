@@ -37,6 +37,16 @@ public interface AsistenciaRepository extends JpaRepository<Asistencia, Integer>
     long contarSociosUnicos(@Param("desde") LocalDate desde, @Param("hasta") LocalDate hasta,
                             @Param("idSucursal") Integer idSucursal);
 
+    /** Entrada del socio en la fecha indicada que todavía no tiene hora de salida (el socio sigue dentro). */
+    @Query("SELECT a FROM Asistencia a WHERE a.socio.id = :socioId AND a.fecha = :fecha AND a.horaSalida IS NULL " +
+            "ORDER BY a.horaEntrada DESC")
+    List<Asistencia> findAbiertasBySocioIdAndFecha(@Param("socioId") Integer socioId, @Param("fecha") LocalDate fecha);
+
+    @Query("SELECT a FROM Asistencia a JOIN FETCH a.socio s JOIN FETCH s.usuario LEFT JOIN FETCH a.sucursal " +
+            "LEFT JOIN FETCH a.recepcionista r LEFT JOIN FETCH r.usuario LEFT JOIN FETCH a.usuarioRegistro " +
+            "WHERE a.id = :id")
+    Optional<Asistencia> findByIdConDetalles(@Param("id") Integer id);
+
     long countByFecha(LocalDate fecha);
 
     long countByFechaBetween(LocalDate desde, LocalDate hasta);
