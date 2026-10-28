@@ -37,7 +37,9 @@ public class AvisoPagoService {
         User usuario = factura.getMembresia().getSocio().getUsuario();
         String titulo = descuento && recargo ? "Descuento y recargo aplicados a tu pago"
                 : descuento ? "Descuento aplicado a tu pago" : "Recargo aplicado a tu pago";
-        String promocion = descuento ? " (" + cotizacion.getNombrePromocion() + ")" : "";
+        String promocion = (descuento && cotizacion.getNombrePromocion() != null && !cotizacion.getNombrePromocion().isBlank())
+                ? " (" + cotizacion.getNombrePromocion() + ")"
+                : "";
         String mensaje = String.format(Locale.ROOT,
                 "Factura #%d del plan '%s'. Precio base: Q%.2f. Descuento: Q%.2f%s. "
                         + "Recargo por pago tardio: Q%.2f (%s%%; %d dia(s) de atraso). Total facturado: Q%.2f.",
