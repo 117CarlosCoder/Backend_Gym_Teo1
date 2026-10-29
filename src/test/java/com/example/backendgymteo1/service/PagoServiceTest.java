@@ -477,6 +477,101 @@ class PagoServiceTest {
     }
 
     @Test
+    @DisplayName("Registrar pago acepta descuento directo enviado en el request y permite cobrar el monto con descuento")
+    void testRegistrarPago_ConDescuentoDirecto_AceptaMontoConDescuento() {
+        Membresia m = membresiaConPlan(33, "250.00", LocalDate.now().plusDays(5));
+        when(membresiaRepository.findByIdWithDetails(33)).thenReturn(Optional.of(m));
+        when(metodoPagoRepository.findById(1)).thenReturn(Optional.of(metodoEfectivo));
+        when(promocionRepository.findVigentes(any(LocalDate.class))).thenReturn(List.of());
+        when(recepcionistaRepository.findById(2)).thenReturn(Optional.of(recepcionistaEntity));
+        when(estadoFacturaRepository.findById(2)).thenReturn(Optional.of(estadoPagada));
+        when(facturaRepository.save(any(Factura.class))).thenAnswer(i -> i.getArgument(0));
+        when(comprobantePagoRepository.save(any(ComprobantePago.class))).thenAnswer(i -> i.getArgument(0));
+        when(estadoMembresiaRepository.findById(1)).thenReturn(Optional.of(estadoActiva));
+        when(pagoMapper.toPagoDto(any(ComprobantePago.class))).thenReturn(PagoResponseDto.builder().build());
+
+        CreatePagoDto request = CreatePagoDto.builder()
+                .idMembresia(33)
+                .idMetodoPago(1)
+                .descuento(new BigDecimal("50.00"))
+                .monto(new BigDecimal("200.00"))
+                .build();
+
+        pagoService.registrarPago(request, recepcionistaUser);
+
+        ArgumentCaptor<Factura> facturaCaptor = ArgumentCaptor.forClass(Factura.class);
+        verify(facturaRepository).save(facturaCaptor.capture());
+        Factura f = facturaCaptor.getValue();
+        assertEquals(new BigDecimal("250.00"), f.getMontoBase());
+        assertEquals(new BigDecimal("50.00"), f.getDescuento());
+        assertEquals(new BigDecimal("200.00"), f.getMonto());
+    }
+
+    @Test
+    @DisplayName("Registrar pago con promoción específica (idPromocion) aplica el descuento de esa promoción")
+    void testRegistrarPago_ConIdPromocionEspecifica() {
+        Membresia m = membresiaConPlan(34, "250.00", LocalDate.now().plusDays(5));
+        Promocion promoSeleccionada = promocion(5, Promocion.TipoDescuento.PORCENTAJE, "10");
+        when(membresiaRepository.findByIdWithDetails(34)).thenReturn(Optional.of(m));
+        when(metodoPagoRepository.findById(1)).thenReturn(Optional.of(metodoEfectivo));
+        when(promocionRepository.findById(5)).thenReturn(Optional.of(promoSeleccionada));
+        when(recepcionistaRepository.findById(2)).thenReturn(Optional.of(recepcionistaEntity));
+        when(estadoFacturaRepository.findById(2)).thenReturn(Optional.of(estadoPagada));
+        when(facturaRepository.save(any(Factura.class))).thenAnswer(i -> i.getArgument(0));
+        when(comprobantePagoRepository.save(any(ComprobantePago.class))).thenAnswer(i -> i.getArgument(0));
+        when(estadoMembresiaRepository.findById(1)).thenReturn(Optional.of(estadoActiva));
+        when(pagoMapper.toPagoDto(any(ComprobantePago.class))).thenReturn(PagoResponseDto.builder().build());
+
+        CreatePagoDto request = CreatePagoDto.builder()
+                .idMembresia(34)
+                .idMetodoPago(1)
+                .idPromocion(5)
+                .monto(new BigDecimal("225.00"))
+                .build();
+
+        pagoService.registrarPago(request, recepcionistaUser);
+
+        ArgumentCaptor<Factura> facturaCaptor = ArgumentCaptor.forClass(Factura.class);
+        verify(facturaRepository).save(facturaCaptor.capture());
+        Factura f = facturaCaptor.getValue();
+        assertEquals(5, f.getIdPromocion());
+        assertEquals(new BigDecimal("25.00"), f.getDescuento());
+        assertEquals(new BigDecimal("225.00"), f.getMonto());
+    }
+
+    @Test
+    @DisplayName("Registrar pago en membresía vencida con promoción activa acepta el monto con descuento del plan (base - descuento)")
+    void testRegistrarPago_MembresiaVencidaConPromocion_AceptaMontoConDescuentoSinRecargo() {
+        Membresia m = membresiaConPlan(35, "250.00", LocalDate.now().minusDays(3));
+        when(membresiaRepository.findByIdWithDetails(35)).thenReturn(Optional.of(m));
+        when(metodoPagoRepository.findById(1)).thenReturn(Optional.of(metodoEfectivo));
+        when(promocionRepository.findVigentes(any(LocalDate.class)))
+                .thenReturn(List.of(promocion(11, Promocion.TipoDescuento.PORCENTAJE, "10")));
+        when(recepcionistaRepository.findById(2)).thenReturn(Optional.of(recepcionistaEntity));
+        when(estadoFacturaRepository.findById(2)).thenReturn(Optional.of(estadoPagada));
+        when(facturaRepository.save(any(Factura.class))).thenAnswer(i -> i.getArgument(0));
+        when(comprobantePagoRepository.save(any(ComprobantePago.class))).thenAnswer(i -> i.getArgument(0));
+        when(estadoMembresiaRepository.findById(1)).thenReturn(Optional.of(estadoActiva));
+        when(pagoMapper.toPagoDto(any(ComprobantePago.class))).thenReturn(PagoResponseDto.builder().build());
+
+        CreatePagoDto request = CreatePagoDto.builder()
+                .idMembresia(35)
+                .idMetodoPago(1)
+                .monto(new BigDecimal("225.00"))
+                .build();
+
+        pagoService.registrarPago(request, recepcionistaUser);
+
+        ArgumentCaptor<Factura> facturaCaptor = ArgumentCaptor.forClass(Factura.class);
+        verify(facturaRepository).save(facturaCaptor.capture());
+        Factura f = facturaCaptor.getValue();
+        assertEquals(new BigDecimal("250.00"), f.getMontoBase());
+        assertEquals(new BigDecimal("25.00"), f.getDescuento());
+        assertEquals(new BigDecimal("0.00"), f.getRecargo());
+        assertEquals(new BigDecimal("225.00"), f.getMonto());
+    }
+
+    @Test
     @DisplayName("Registrar pago con monto menor al total (con recargo) es rechazado y no persiste nada")
     void testRegistrarPago_MontoInsuficienteConRecargo() {
         Membresia m = membresiaConPlan(31, "250.00", LocalDate.now().minusDays(2));
