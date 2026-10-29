@@ -29,4 +29,26 @@ public interface FacturaRepository extends JpaRepository<Factura, Integer> {
             "WHERE s.id = :socioId " +
             "ORDER BY f.fechaEmision DESC")
     List<Factura> findBySocioId(@Param("socioId") Integer socioId);
+
+    // --- Pagos en abonos y estado de cuenta ---
+
+    @Query("SELECT f FROM Factura f " +
+            "JOIN FETCH f.estadoFactura ef " +
+            "WHERE f.membresia.id = :idMembresia AND (ef.id = 1 OR UPPER(ef.nombre) = 'PENDIENTE') " +
+            "ORDER BY f.fechaEmision ASC, f.id ASC")
+    List<Factura> findPendientesByMembresiaId(@Param("idMembresia") Integer idMembresia);
+
+    @Query("SELECT f FROM Factura f " +
+            "JOIN FETCH f.estadoFactura ef " +
+            "WHERE f.membresia.socio.id = :socioId AND (ef.id = 1 OR UPPER(ef.nombre) = 'PENDIENTE') " +
+            "ORDER BY f.fechaVencimiento ASC, f.id ASC")
+    List<Factura> findPendientesBySocioId(@Param("socioId") Integer socioId);
+
+    @Query("SELECT f FROM Factura f " +
+            "JOIN FETCH f.membresia m " +
+            "JOIN FETCH m.plan p " +
+            "JOIN FETCH f.estadoFactura ef " +
+            "WHERE m.socio.id = :socioId " +
+            "ORDER BY f.fechaEmision DESC, f.id DESC")
+    List<Factura> findEstadoCuentaBySocioId(@Param("socioId") Integer socioId);
 }
