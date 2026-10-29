@@ -54,7 +54,7 @@ public class AsistenciaController {
             @ApiResponse(responseCode = "403", description = "Acceso denegado (requiere rol ADMIN o RECEPCIONISTA)", content = @Content)
     })
     @PostMapping({"/registro"})
-    @PreAuthorize("hasAnyRole('RECEPCIONISTA')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
     public ResponseEntity<RegistroAsistenciaResponseDto> registrarEntrada(
             @Valid @RequestBody RegistrarAsistenciaDto request,
             @CurrentUser User currentUser) {
