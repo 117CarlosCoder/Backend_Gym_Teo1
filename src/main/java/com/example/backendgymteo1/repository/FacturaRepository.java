@@ -14,6 +14,8 @@ public interface FacturaRepository extends JpaRepository<Factura, Integer> {
 
     boolean existsByIdPromocion(Integer idPromocion);
 
+    boolean existsByMembresiaId(Integer idMembresia);
+
     @Query("SELECT f FROM Factura f " +
             "JOIN FETCH f.membresia m " +
             "JOIN FETCH m.socio s " +

@@ -16,6 +16,7 @@ import com.example.backendgymteo1.repository.MembresiaRepository;
 import com.example.backendgymteo1.repository.RecepcionistaRepository;
 import com.example.backendgymteo1.repository.SocioRepository;
 import com.example.backendgymteo1.repository.SucursalRepository;
+import com.example.backendgymteo1.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -39,6 +40,7 @@ public class AsistenciaService {
     private final MembresiaRepository membresiaRepository;
     private final SucursalRepository sucursalRepository;
     private final RecepcionistaRepository recepcionistaRepository;
+    private final UserRepository userRepository;
     private final SocioService socioService;
     private final AuditoriaService auditoriaService;
     private final CongelamientoService congelamientoService;
@@ -110,10 +112,15 @@ public class AsistenciaService {
 
         // 4.obtener recepcionista (si el usuario autenticado aun no tiene perfil, se crea)
         Recepcionista recepcionista = recepcionistaRepository.findById(usuarioAutenticado.getId())
-                .orElseGet(() -> recepcionistaRepository.save(Recepcionista.builder()
-                        .usuario(usuarioAutenticado)
-                        .fechaContratacion(LocalDate.now())
-                        .build()));
+                .orElseGet(() -> {
+                    User usuarioManaged = userRepository != null
+                            ? userRepository.findById(usuarioAutenticado.getId()).orElse(usuarioAutenticado)
+                            : usuarioAutenticado;
+                    return recepcionistaRepository.save(Recepcionista.builder()
+                            .usuario(usuarioManaged)
+                            .fechaContratacion(LocalDate.now())
+                            .build());
+                });
 
         // 5. registro
         LocalTime horaEntrada = LocalTime.now();
