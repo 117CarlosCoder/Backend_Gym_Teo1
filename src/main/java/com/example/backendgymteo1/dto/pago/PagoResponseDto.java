@@ -81,4 +81,24 @@ public class PagoResponseDto {
 
     @Schema(description = "Observación o nota del pago", example = "Pago exitoso")
     private String observacion;
+
+    // --- Pagos en cuotas / abonos ---
+
+    @Schema(description = "Total de la factura (precio - descuento + recargo)", example = "250.00")
+    private BigDecimal totalFactura;
+
+    @Schema(description = "PAGADA o PENDIENTE (con saldo)", example = "PENDIENTE")
+    private String estadoFactura;
+
+    @Schema(description = "Número de pago dentro de la factura (1 = pago inicial)", example = "2")
+    private Integer numeroAbono;
+
+    @Schema(description = "Pagado en la factura hasta este comprobante, incluido", example = "200.00")
+    private BigDecimal totalAbonado;
+
+    @Schema(description = "Saldo que quedó pendiente después de este comprobante", example = "50.00")
+    private BigDecimal saldoPendiente;
+
+    @Schema(description = "Fecha límite para liquidar el saldo", example = "2026-11-13")
+    private LocalDate fechaLimiteSaldo;
 }

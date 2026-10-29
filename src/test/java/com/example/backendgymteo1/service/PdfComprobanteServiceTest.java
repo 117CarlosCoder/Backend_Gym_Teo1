@@ -102,6 +102,30 @@ class PdfComprobanteServiceTest {
     }
 
     @Test
+    @DisplayName("Un abono muestra el total de la factura, lo abonado y el saldo pendiente con su fecha límite")
+    void comprobanteDeAbonoMuestraSaldo() throws Exception {
+        PagoResponseDto pago = pagoBase()
+                .montoBase(new BigDecimal("250.00"))
+                .descuento(BigDecimal.ZERO)
+                .recargo(BigDecimal.ZERO)
+                .montoPagado(new BigDecimal("150.00"))
+                .totalFactura(new BigDecimal("250.00"))
+                .numeroAbono(1)
+                .totalAbonado(new BigDecimal("150.00"))
+                .saldoPendiente(new BigDecimal("100.00"))
+                .fechaLimiteSaldo(LocalDate.of(2026, 11, 5))
+                .build();
+
+        String texto = textoDelPdf(service.generarComprobantePdf(pago));
+
+        assertTrue(texto.contains("PAGO EN ABONOS"), texto);
+        assertTrue(texto.contains("Monto pagado en este abono"), texto);
+        assertTrue(texto.contains("Saldo pendiente"), texto);
+        assertTrue(texto.contains("Q. 100.00"), texto);
+        assertTrue(texto.contains("05/11/2026"), texto);
+    }
+
+    @Test
     @DisplayName("No genera comprobante para un pago nulo")
     void rechazaPagoNulo() {
         assertThrows(RuntimeException.class, () -> service.generarComprobantePdf(null));

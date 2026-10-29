@@ -102,5 +102,23 @@ public interface ComprobantePagoRepository extends JpaRepository<ComprobantePago
             "WHERE (:anio IS NULL OR YEAR(c.fechaPago) = :anio) " +
             "ORDER BY c.fechaPago DESC")
     List<ComprobantePago> findPagosDetallados(@Param("anio") Integer anio, Pageable pageable);
-}
 
+    // --- Pagos en abonos: saldo de cada factura ---
+
+    @Query("SELECT COALESCE(SUM(c.montoPagado), 0) FROM ComprobantePago c WHERE c.factura.id = :idFactura")
+    BigDecimal sumPagadoPorFactura(@Param("idFactura") Integer idFactura);
+
+    /** Lo pagado en la factura hasta (e incluyendo) el comprobante indicado. */
+    @Query("SELECT COALESCE(SUM(c.montoPagado), 0) FROM ComprobantePago c " +
+            "WHERE c.factura.id = :idFactura AND c.id <= :idComprobante")
+    BigDecimal sumPagadoHasta(@Param("idFactura") Integer idFactura, @Param("idComprobante") Integer idComprobante);
+
+    @Query("SELECT COUNT(c) FROM ComprobantePago c WHERE c.factura.id = :idFactura AND c.id <= :idComprobante")
+    long contarHasta(@Param("idFactura") Integer idFactura, @Param("idComprobante") Integer idComprobante);
+
+    @Query("SELECT c FROM ComprobantePago c " +
+            "JOIN FETCH c.metodoPago mp " +
+            "WHERE c.factura.id IN :idsFactura " +
+            "ORDER BY c.fechaPago ASC, c.id ASC")
+    List<ComprobantePago> findByFacturaIds(@Param("idsFactura") List<Integer> idsFactura);
+}

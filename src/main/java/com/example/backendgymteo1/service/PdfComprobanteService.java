@@ -158,9 +158,34 @@ public class PdfComprobanteService {
             } else {
                 addTableCell(desgloseTable, "Recargo por pago tardío / mora:", "No aplica (pago a tiempo)", fontLabel, fontValue);
             }
-            addTableCell(desgloseTable, "Monto Total Pagado:", montoStr, fontLabel, fontAmount);
+            boolean enAbonos = (pago.getNumeroAbono() != null && pago.getNumeroAbono() > 1)
+                    || (pago.getSaldoPendiente() != null && pago.getSaldoPendiente().signum() > 0);
+            if (enAbonos) {
+                addTableCell(desgloseTable, "Total de la factura:", formatoQuetzales(pago.getTotalFactura()), fontLabel, fontValue);
+                addTableCell(desgloseTable, "Monto pagado en este abono:", montoStr, fontLabel, fontAmount);
+            } else {
+                addTableCell(desgloseTable, "Monto Total Pagado:", montoStr, fontLabel, fontAmount);
+            }
             document.add(desgloseTable);
             document.add(new Paragraph(" "));
+
+            // Pago en cuotas / abonos: cuánto se lleva pagado y el saldo que queda
+            if (enAbonos) {
+                document.add(createSectionTitle("PAGO EN ABONOS - ESTADO DE LA FACTURA", fontSectionHeader));
+                PdfPTable abonosTable = new PdfPTable(2);
+                abonosTable.setWidthPercentage(100);
+                abonosTable.setWidths(new float[]{60f, 40f});
+                BigDecimal saldo = valorOCero(pago.getSaldoPendiente());
+                addTableCell(abonosTable, "Número de abono:", String.valueOf(pago.getNumeroAbono() != null ? pago.getNumeroAbono() : 1), fontLabel, fontValue);
+                addTableCell(abonosTable, "Total abonado a la fecha:", formatoQuetzales(pago.getTotalAbonado()), fontLabel, fontValue);
+                addTableCell(abonosTable, "Saldo pendiente:", saldo.signum() > 0 ? formatoQuetzales(saldo) : "Q. 0.00 (factura liquidada)",
+                        fontLabel, saldo.signum() > 0 ? fontRecargo : fontDescuento);
+                if (saldo.signum() > 0 && pago.getFechaLimiteSaldo() != null) {
+                    addTableCell(abonosTable, "Fecha límite para liquidar el saldo:", pago.getFechaLimiteSaldo().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")), fontLabel, fontValue);
+                }
+                document.add(abonosTable);
+                document.add(new Paragraph(" "));
+            }
             document.add(new Paragraph(" "));
 
             Paragraph footer = new Paragraph("¡Gracias por su pago! Este documento sirve como comprobante oficial de su transacción en Gimnasio Teo.", fontFooter);

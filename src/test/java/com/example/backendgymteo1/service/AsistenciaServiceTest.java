@@ -74,6 +74,12 @@ class AsistenciaServiceTest {
     @Mock
     private AuditoriaService auditoriaService;
 
+    @Mock
+    private CongelamientoService congelamientoService;
+
+    @Mock
+    private EstadoCuentaService estadoCuentaService;
+
     @InjectMocks
     private AsistenciaService asistenciaService;
 
