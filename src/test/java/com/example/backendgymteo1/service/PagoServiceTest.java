@@ -1,5 +1,7 @@
 package com.example.backendgymteo1.service;
 
+import com.example.backendgymteo1.dto.configuracion.ReglasAbonoDto;
+import com.example.backendgymteo1.dto.pago.CreateAbonoDto;
 import com.example.backendgymteo1.dto.pago.CreatePagoDto;
 import com.example.backendgymteo1.dto.pago.PagoResponseDto;
 import com.example.backendgymteo1.entity.ComprobantePago;
@@ -93,6 +95,12 @@ class PagoServiceTest {
     @Mock
     private AvisoPagoService avisoPagoService;
 
+    @Mock
+    private EstadoCuentaService estadoCuentaService;
+
+    @Mock
+    private CongelamientoService congelamientoService;
+
     @InjectMocks
     private PagoService pagoService;
 
@@ -107,6 +115,8 @@ class PagoServiceTest {
     void setUp() {
         org.mockito.Mockito.lenient().when(configuracionSistemaService.obtenerRecargoTardioPorcentaje())
                 .thenReturn(new BigDecimal("10.00"));
+        org.mockito.Mockito.lenient().when(configuracionSistemaService.consultarReglasAbono())
+                .thenReturn(ReglasAbonoDto.builder().porcentajeMinimoInicial(50).plazoDias(15).build());
         recepcionistaUser = User.builder()
                 .id(2)
                 .correo("recepcion@gym.com")
@@ -572,7 +582,7 @@ class PagoServiceTest {
     }
 
     @Test
-    @DisplayName("Registrar pago con monto menor al total (con recargo) es rechazado y no persiste nada")
+    @DisplayName("Un primer abono menor al mínimo (50% del total con recargo) es rechazado y no persiste nada")
     void testRegistrarPago_MontoInsuficienteConRecargo() {
         Membresia m = membresiaConPlan(31, "250.00", LocalDate.now().minusDays(2));
         when(membresiaRepository.findByIdWithDetails(31)).thenReturn(Optional.of(m));
@@ -580,12 +590,13 @@ class PagoServiceTest {
         when(promocionRepository.findVigentes(any(LocalDate.class))).thenReturn(List.of());
 
         CreatePagoDto request = CreatePagoDto.builder()
-                .idMembresia(31).idMetodoPago(1).monto(new BigDecimal("250.00")).build();
+                .idMembresia(31).idMetodoPago(1).monto(new BigDecimal("100.00")).build();
 
         RuntimeException ex = assertThrows(RuntimeException.class,
                 () -> pagoService.registrarPago(request, recepcionistaUser));
 
-        assertTrue(ex.getMessage().contains("275.00"));
+        assertTrue(ex.getMessage().contains("137.50"), ex.getMessage());
+        assertTrue(ex.getMessage().contains("275.00"), ex.getMessage());
         verify(facturaRepository, never()).save(any(Factura.class));
         verify(membresiaRepository, never()).save(any(Membresia.class));
         org.mockito.Mockito.verifyNoInteractions(avisoPagoService);
@@ -639,5 +650,151 @@ class PagoServiceTest {
         pagoService.buscarHistorialPagos(null, null, null, null, PageRequest.of(0, 10));
 
         verify(comprobantePagoRepository).buscarHistorial(eq(null), eq(null), eq(null), eq(null), any());
+    }
+
+    // --- Ajuste del PO: pagos en cuotas / abonos ---
+
+    @Test
+    @DisplayName("Un pago menor al total pero sobre el mínimo es un primer abono: factura PENDIENTE con plazo y membresía extendida")
+    void testRegistrarPago_PrimerAbonoDejaSaldoPendiente() {
+        Membresia m = membresiaConPlan(40, "250.00", LocalDate.now().plusDays(5));
+        EstadoFactura pendiente = EstadoFactura.builder().id(1).nombre("PENDIENTE").build();
+        when(membresiaRepository.findByIdWithDetails(40)).thenReturn(Optional.of(m));
+        when(metodoPagoRepository.findById(1)).thenReturn(Optional.of(metodoEfectivo));
+        when(promocionRepository.findVigentes(any(LocalDate.class))).thenReturn(List.of());
+        when(recepcionistaRepository.findById(2)).thenReturn(Optional.of(recepcionistaEntity));
+        when(estadoFacturaRepository.findById(1)).thenReturn(Optional.of(pendiente));
+        when(estadoMembresiaRepository.findById(1)).thenReturn(Optional.of(estadoActiva));
+        when(facturaRepository.save(any(Factura.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(comprobantePagoRepository.save(any(ComprobantePago.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        CreatePagoDto request = CreatePagoDto.builder()
+                .idMembresia(40).idMetodoPago(1).monto(new BigDecimal("150.00")).build();
+
+        pagoService.registrarPago(request, recepcionistaUser);
+
+        ArgumentCaptor<Factura> facturaCaptor = ArgumentCaptor.forClass(Factura.class);
+        verify(facturaRepository).save(facturaCaptor.capture());
+        Factura f = facturaCaptor.getValue();
+        assertEquals("PENDIENTE", f.getEstadoFactura().getNombre());
+        assertEquals(new BigDecimal("250.00"), f.getMonto());
+        assertEquals(LocalDate.now().plusDays(15), f.getFechaVencimiento());
+
+        ArgumentCaptor<ComprobantePago> comprobanteCaptor = ArgumentCaptor.forClass(ComprobantePago.class);
+        verify(comprobantePagoRepository).save(comprobanteCaptor.capture());
+        assertEquals(new BigDecimal("150.00"), comprobanteCaptor.getValue().getMontoPagado());
+        assertEquals(LocalDate.now().plusDays(35), m.getFechaVencimiento());
+    }
+
+    @Test
+    @DisplayName("No se cobra un nuevo periodo mientras la membresía tenga saldo pendiente")
+    void testRegistrarPago_BloqueadoConSaldoPendiente() {
+        Membresia m = membresiaConPlan(41, "250.00", LocalDate.now().plusDays(5));
+        when(membresiaRepository.findByIdWithDetails(41)).thenReturn(Optional.of(m));
+        when(metodoPagoRepository.findById(1)).thenReturn(Optional.of(metodoEfectivo));
+        org.mockito.Mockito.doThrow(new RuntimeException("La membresía tiene un saldo pendiente de Q. 100.00 en la factura #9."))
+                .when(estadoCuentaService).validarSinSaldoPendiente(41);
+
+        CreatePagoDto request = CreatePagoDto.builder()
+                .idMembresia(41).idMetodoPago(1).monto(new BigDecimal("250.00")).build();
+
+        RuntimeException ex = assertThrows(RuntimeException.class, () -> pagoService.registrarPago(request, recepcionistaUser));
+        assertTrue(ex.getMessage().contains("saldo pendiente"));
+        verify(facturaRepository, never()).save(any(Factura.class));
+    }
+
+    @Test
+    @DisplayName("Un pago que deja la membresía congelada conserva el estado CONGELADA")
+    void testRegistrarPago_MembresiaCongeladaSigueCongelada() {
+        Membresia m = membresiaConPlan(42, "250.00", LocalDate.now().plusDays(20));
+        EstadoMembresia congelada = EstadoMembresia.builder().id(3).nombre("CONGELADA").build();
+        when(membresiaRepository.findByIdWithDetails(42)).thenReturn(Optional.of(m));
+        when(metodoPagoRepository.findById(1)).thenReturn(Optional.of(metodoEfectivo));
+        when(promocionRepository.findVigentes(any(LocalDate.class))).thenReturn(List.of());
+        when(recepcionistaRepository.findById(2)).thenReturn(Optional.of(recepcionistaEntity));
+        when(estadoFacturaRepository.findById(2)).thenReturn(Optional.of(estadoPagada));
+        when(congelamientoService.estaCongeladaEn(eq(42), any(LocalDate.class))).thenReturn(true);
+        when(estadoMembresiaRepository.findById(3)).thenReturn(Optional.of(congelada));
+        when(facturaRepository.save(any(Factura.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(comprobantePagoRepository.save(any(ComprobantePago.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        pagoService.registrarPago(CreatePagoDto.builder()
+                .idMembresia(42).idMetodoPago(1).monto(new BigDecimal("250.00")).build(), recepcionistaUser);
+
+        assertEquals("CONGELADA", m.getEstadoMembresia().getNombre());
+    }
+
+    private Factura facturaPendiente(int id, String total) {
+        return Factura.builder()
+                .id(id)
+                .membresia(membresiaConPlan(50, total, LocalDate.now().plusDays(20)))
+                .estadoFactura(EstadoFactura.builder().id(1).nombre("PENDIENTE").build())
+                .monto(new BigDecimal(total))
+                .montoBase(new BigDecimal(total))
+                .fechaEmision(LocalDate.now().minusDays(3))
+                .fechaVencimiento(LocalDate.now().plusDays(12))
+                .build();
+    }
+
+    @Test
+    @DisplayName("El abono que cubre todo el saldo deja la factura PAGADA")
+    void testRegistrarAbono_LiquidaFactura() {
+        Factura factura = facturaPendiente(9, "250.00");
+        when(facturaRepository.findByIdWithDetails(9)).thenReturn(Optional.of(factura));
+        when(metodoPagoRepository.findById(1)).thenReturn(Optional.of(metodoEfectivo));
+        when(estadoCuentaService.saldoDe(factura)).thenReturn(new BigDecimal("100.00"));
+        when(estadoFacturaRepository.findById(2)).thenReturn(Optional.of(estadoPagada));
+        when(comprobantePagoRepository.save(any(ComprobantePago.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        pagoService.registrarAbono(CreateAbonoDto.builder()
+                .idFactura(9).idMetodoPago(1).monto(new BigDecimal("100.00")).build(), recepcionistaUser);
+
+        assertEquals("PAGADA", factura.getEstadoFactura().getNombre());
+        verify(facturaRepository).save(factura);
+    }
+
+    @Test
+    @DisplayName("Un abono parcial mantiene la factura PENDIENTE")
+    void testRegistrarAbono_ParcialSiguePendiente() {
+        Factura factura = facturaPendiente(10, "250.00");
+        when(facturaRepository.findByIdWithDetails(10)).thenReturn(Optional.of(factura));
+        when(metodoPagoRepository.findById(1)).thenReturn(Optional.of(metodoEfectivo));
+        when(estadoCuentaService.saldoDe(factura)).thenReturn(new BigDecimal("100.00"));
+        when(comprobantePagoRepository.save(any(ComprobantePago.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        pagoService.registrarAbono(CreateAbonoDto.builder()
+                .idFactura(10).idMetodoPago(1).monto(new BigDecimal("40.00")).build(), recepcionistaUser);
+
+        assertEquals("PENDIENTE", factura.getEstadoFactura().getNombre());
+        verify(facturaRepository, never()).save(any(Factura.class));
+    }
+
+    @Test
+    @DisplayName("Un abono mayor al saldo es rechazado")
+    void testRegistrarAbono_SuperaSaldo() {
+        Factura factura = facturaPendiente(11, "250.00");
+        when(facturaRepository.findByIdWithDetails(11)).thenReturn(Optional.of(factura));
+        when(metodoPagoRepository.findById(1)).thenReturn(Optional.of(metodoEfectivo));
+        when(estadoCuentaService.saldoDe(factura)).thenReturn(new BigDecimal("100.00"));
+
+        RuntimeException ex = assertThrows(RuntimeException.class, () -> pagoService.registrarAbono(CreateAbonoDto.builder()
+                .idFactura(11).idMetodoPago(1).monto(new BigDecimal("120.00")).build(), recepcionistaUser));
+
+        assertTrue(ex.getMessage().contains("supera el saldo"));
+        verify(comprobantePagoRepository, never()).save(any(ComprobantePago.class));
+    }
+
+    @Test
+    @DisplayName("No se puede abonar a una factura ya pagada")
+    void testRegistrarAbono_FacturaPagada() {
+        Factura factura = facturaPendiente(12, "250.00");
+        factura.setEstadoFactura(estadoPagada);
+        when(facturaRepository.findByIdWithDetails(12)).thenReturn(Optional.of(factura));
+        when(metodoPagoRepository.findById(1)).thenReturn(Optional.of(metodoEfectivo));
+
+        RuntimeException ex = assertThrows(RuntimeException.class, () -> pagoService.registrarAbono(CreateAbonoDto.builder()
+                .idFactura(12).idMetodoPago(1).monto(new BigDecimal("10.00")).build(), recepcionistaUser));
+
+        assertTrue(ex.getMessage().contains("no tiene saldo pendiente"));
     }
 }

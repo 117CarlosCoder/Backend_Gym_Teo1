@@ -26,6 +26,11 @@ import java.time.LocalDateTime;
 public class ConfiguracionSistema {
 
     public static final String RECARGO_TARDIO_PORCENTAJE = "recargo_tardio_porcentaje";
+    public static final String CONGELAMIENTO_DIAS_MINIMO = "congelamiento_dias_minimo";
+    public static final String CONGELAMIENTO_DIAS_MAXIMO = "congelamiento_dias_maximo";
+    public static final String CONGELAMIENTO_MAX_POR_ANIO = "congelamiento_max_por_anio";
+    public static final String ABONO_MINIMO_PORCENTAJE = "abono_minimo_porcentaje";
+    public static final String ABONO_PLAZO_DIAS = "abono_plazo_dias";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

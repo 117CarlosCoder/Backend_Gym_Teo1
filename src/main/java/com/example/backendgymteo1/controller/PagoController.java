@@ -2,11 +2,14 @@ package com.example.backendgymteo1.controller;
 
 import com.example.backendgymteo1.config.security.CurrentUser;
 import com.example.backendgymteo1.dto.pago.CotizacionPagoDto;
+import com.example.backendgymteo1.dto.pago.CreateAbonoDto;
+import com.example.backendgymteo1.dto.pago.EstadoCuentaDto;
 import com.example.backendgymteo1.dto.pago.CreatePagoDto;
 import com.example.backendgymteo1.dto.pago.MetodoPagoResponseDto;
 import com.example.backendgymteo1.dto.pago.PagoResponseDto;
 import com.example.backendgymteo1.entity.Rol;
 import com.example.backendgymteo1.entity.User;
+import com.example.backendgymteo1.service.EstadoCuentaService;
 import com.example.backendgymteo1.service.PagoService;
 import com.example.backendgymteo1.service.PdfComprobanteService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -51,6 +54,7 @@ public class PagoController {
 
     private final PagoService pagoService;
     private final PdfComprobanteService pdfComprobanteService;
+    private final EstadoCuentaService estadoCuentaService;
 
     @Operation(summary = "Registrar un nuevo pago de membresía", description = "Registra la factura y el comprobante de pago, y recalcula automáticamente la fechaVencimiento de la membresía según la duración del plan.")
     @ApiResponses(value = {
@@ -67,6 +71,42 @@ public class PagoController {
             @Valid @RequestBody CreatePagoDto request,
             @CurrentUser User currentUser) {
         return ResponseEntity.status(HttpStatus.CREATED).body(pagoService.registrarPago(request, currentUser));
+    }
+
+    @Operation(summary = "Registrar un abono al saldo de una factura", description = "Pagos en cuotas: suma un comprobante a una factura PENDIENTE. El abono no puede superar el saldo; al llegar a cero la factura pasa a PAGADA. Requiere rol ADMIN o RECEPCIONISTA.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "201", description = "Abono registrado",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = PagoResponseDto.class))),
+            @ApiResponse(responseCode = "400", description = "La factura no tiene saldo o el abono supera el saldo", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Factura o método de pago no encontrado", content = @Content)
+    })
+    @PostMapping("/abonos")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
+    public ResponseEntity<PagoResponseDto> registrarAbono(
+            @Valid @RequestBody CreateAbonoDto request,
+            @CurrentUser User currentUser) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(pagoService.registrarAbono(request, currentUser));
+    }
+
+    @Operation(summary = "Estado de cuenta de un socio", description = "Facturas con su total, lo pagado, el saldo pendiente, la fecha límite y cada abono. Un CLIENTE solo puede consultar el suyo.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Estado de cuenta",
+                    content = @Content(mediaType = "application/json", schema = @Schema(implementation = EstadoCuentaDto.class))),
+            @ApiResponse(responseCode = "403", description = "Acceso denegado", content = @Content),
+            @ApiResponse(responseCode = "404", description = "Socio no encontrado", content = @Content)
+    })
+    @GetMapping("/estado-cuenta/socio/{socioId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA', 'CLIENTE')")
+    public ResponseEntity<EstadoCuentaDto> estadoCuenta(@PathVariable Integer socioId, @CurrentUser User currentUser) {
+        verificarAccesoSocio(socioId, currentUser);
+        return ResponseEntity.ok(estadoCuentaService.estadoCuenta(socioId));
+    }
+
+    @Operation(summary = "Estado de cuenta del socio autenticado (/me)")
+    @GetMapping("/estado-cuenta/me")
+    @PreAuthorize("hasRole('CLIENTE')")
+    public ResponseEntity<EstadoCuentaDto> miEstadoCuenta(@CurrentUser User currentUser) {
+        return ResponseEntity.ok(estadoCuentaService.estadoCuenta(currentUser.getId()));
     }
 
     @Operation(summary = "Consultar historial de pagos por socio", description = "Retorna la lista paginada de comprobantes de pago pertenecientes a un socio. Admite filtros opcionales por rango de fechas (fechaDesde/fechaHasta, formato yyyy-MM-dd, inclusivos) y por método de pago. Un CLIENTE solo puede consultar su propio historial.")

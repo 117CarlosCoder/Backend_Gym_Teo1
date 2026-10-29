@@ -41,6 +41,8 @@ public class AsistenciaService {
     private final RecepcionistaRepository recepcionistaRepository;
     private final SocioService socioService;
     private final AuditoriaService auditoriaService;
+    private final CongelamientoService congelamientoService;
+    private final EstadoCuentaService estadoCuentaService;
 
     private static final DateTimeFormatter FORMATO_HORA = DateTimeFormatter.ofPattern("HH:mm");
 
@@ -74,6 +76,9 @@ public class AsistenciaService {
 
         // 2.validar la membresia activa
         LocalDate hoy = LocalDate.now();
+        // 2.0 ajustes del PO: membresía congelada o saldo de abonos vencido impiden el ingreso
+        congelamientoService.validarSinCongelamientoActivo(socio.getId(), hoy);
+        estadoCuentaService.validarSinSaldoVencido(socio.getId(), hoy);
         Membresia membresiaActiva = membresiaRepository.findActiveBySocioId(socio.getId(), hoy)
                 .orElseThrow(() -> new RuntimeException("El socio ID " + idSocio + " no cuenta con una membresía activa y vigente"));
 

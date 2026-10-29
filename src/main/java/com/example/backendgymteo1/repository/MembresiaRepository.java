@@ -146,6 +146,8 @@ public interface MembresiaRepository extends JpaRepository<Membresia, Integer> {
 
         boolean existsByPlanId(Integer planId);
 
+        List<Membresia> findByEstadoMembresia_Id(Integer idEstado);
+
         @Query("SELECT DISTINCT m FROM Membresia m " +
                         "JOIN FETCH m.socio s " +
                         "JOIN FETCH s.usuario u " +

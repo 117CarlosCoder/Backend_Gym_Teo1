@@ -1,5 +1,7 @@
 package com.example.backendgymteo1.service;
 
+import com.example.backendgymteo1.dto.configuracion.ReglasAbonoDto;
+import com.example.backendgymteo1.dto.pago.CreateAbonoDto;
 import com.example.backendgymteo1.dto.pago.CreatePagoDto;
 import com.example.backendgymteo1.dto.pago.MetodoPagoResponseDto;
 import com.example.backendgymteo1.dto.pago.PagoResponseDto;
@@ -58,6 +60,8 @@ public class PagoService {
     private final PromocionRepository promocionRepository;
     private final ConfiguracionSistemaService configuracionSistemaService;
     private final AvisoPagoService avisoPagoService;
+    private final EstadoCuentaService estadoCuentaService;
+    private final CongelamientoService congelamientoService;
 
     private static final BigDecimal MONTO_MINIMO = new BigDecimal("0.01");
 
@@ -175,6 +179,9 @@ public class PagoService {
         MetodoPago metodoPago = metodoPagoRepository.findById(request.getIdMetodoPago())
                 .orElseThrow(() -> new ResourceNotFoundException("Método de pago no encontrado con ID: " + request.getIdMetodoPago()));
 
+        // Pagos en abonos: primero se liquida el saldo pendiente
+        estadoCuentaService.validarSinSaldoPendiente(membresia.getId());
+
         CotizacionPagoDto cotizacion = calcularCotizacion(
                 membresia,
                 LocalDate.now(),
@@ -195,8 +202,26 @@ public class PagoService {
             }
         }
 
-        if (request.getMonto() == null || request.getMonto().compareTo(cotizacion.getTotal()) < 0) {
+        if (request.getMonto() == null) {
             throw new RuntimeException(String.format("Disculpe pero su deuda es de Q. %.2f", cotizacion.getTotal()));
+        }
+
+        // Pago en cuotas: si el monto no cubre el total, es un primer abono y la factura queda con saldo
+        boolean esAbono = request.getMonto().compareTo(cotizacion.getTotal()) < 0;
+        ReglasAbonoDto reglasAbono = null;
+        if (esAbono) {
+            reglasAbono = configuracionSistemaService.consultarReglasAbono();
+            if (reglasAbono.getPorcentajeMinimoInicial() >= 100) {
+                throw new RuntimeException(String.format("Disculpe pero su deuda es de Q. %.2f", cotizacion.getTotal()));
+            }
+            BigDecimal minimo = cotizacion.getTotal()
+                    .multiply(BigDecimal.valueOf(reglasAbono.getPorcentajeMinimoInicial()))
+                    .divide(new BigDecimal("100"), 2, RoundingMode.CEILING);
+            if (request.getMonto().compareTo(minimo) < 0) {
+                throw new RuntimeException(String.format(
+                        "El primer abono debe ser de al menos Q. %.2f (%d%% del total de Q. %.2f)",
+                        minimo, reglasAbono.getPorcentajeMinimoInicial(), cotizacion.getTotal()));
+            }
         }
 
         BigDecimal montoSinDescuento = cotizacion.getMontoBase().add(cotizacion.getRecargo());
@@ -211,24 +236,20 @@ public class PagoService {
                         .fechaContratacion(LocalDate.now())
                         .build()));
 
-        EstadoFactura estadoPagada = estadoFacturaRepository.findById(2)
-                .orElseGet(() -> estadoFacturaRepository.findByNombreIgnoreCase("PAGADA")
-                        .orElseGet(() -> estadoFacturaRepository.save(EstadoFactura.builder()
-                                .nombre("PAGADA")
-                                .descripcion("Factura pagada completamente")
-                                .build())));
+        EstadoFactura estadoFactura = esAbono ? estadoFactura(ESTADO_FACTURA_PENDIENTE, "PENDIENTE") : estadoPagada();
+        LocalDate fechaLimite = esAbono ? LocalDate.now().plusDays(reglasAbono.getPlazoDias()) : LocalDate.now();
 
         Factura factura = Factura.builder()
                 .membresia(membresia)
                 .recepcionista(recepcionista)
-                .estadoFactura(estadoPagada)
+                .estadoFactura(estadoFactura)
                 .idPromocion(cotizacion.getIdPromocion())
                 .montoBase(cotizacion.getMontoBase())
                 .descuento(cotizacion.getDescuento())
                 .recargo(cotizacion.getRecargo())
                 .monto(cotizacion.getTotal())
                 .fechaEmision(LocalDate.now())
-                .fechaVencimiento(LocalDate.now())
+                .fechaVencimiento(fechaLimite)
                 .observacion(request.getObservacion() != null ? request.getObservacion() : "Pago de membresía")
                 .build();
         factura = facturaRepository.save(factura);
@@ -253,10 +274,12 @@ public class PagoService {
         LocalDate nuevaFechaVencimiento = fechaBase.plusDays(duracionDias);
         membresia.setFechaVencimiento(nuevaFechaVencimiento);
 
-        EstadoMembresia estadoActiva = estadoMembresiaRepository.findById(1)
-                .orElseGet(() -> estadoMembresiaRepository.findByNombreIgnoreCase("ACTIVA")
-                        .orElseThrow(() -> new ResourceNotFoundException("Estado 'ACTIVA' no encontrado en el catálogo")));
-        membresia.setEstadoMembresia(estadoActiva);
+        // Si tiene un congelamiento en curso sigue CONGELADA; al terminar el congelamiento vuelve a ACTIVA
+        boolean congelada = congelamientoService.estaCongeladaEn(membresia.getId(), hoy);
+        EstadoMembresia nuevoEstado = estadoMembresiaRepository.findById(congelada ? 3 : 1)
+                .orElseGet(() -> estadoMembresiaRepository.findByNombreIgnoreCase(congelada ? "CONGELADA" : "ACTIVA")
+                        .orElseThrow(() -> new ResourceNotFoundException("Estado de membresía no encontrado en el catálogo")));
+        membresia.setEstadoMembresia(nuevoEstado);
         membresiaRepository.save(membresia);
 
         auditoriaService.registrar(
@@ -264,19 +287,84 @@ public class PagoService {
                 "pago",
                 "INSERT",
                 comprobante.getId(),
-                String.format("Pago registrado ID %d (Monto: %s, Ref: %s). Nueva fecha vencimiento membresía ID %d: %s",
-                        comprobante.getId(), montoPagado, request.getReferencia(), membresia.getId(), nuevaFechaVencimiento)
+                String.format("Pago registrado ID %d (Monto: %s, Ref: %s%s). Nueva fecha vencimiento membresía ID %d: %s",
+                        comprobante.getId(), montoPagado, request.getReferencia(),
+                        esAbono ? String.format(", abono inicial; saldo Q. %s hasta %s", cotizacion.getTotal().subtract(montoPagado), fechaLimite) : "",
+                        membresia.getId(), nuevaFechaVencimiento)
         );
 
         avisoPagoService.registrar(factura, cotizacion);
-        return conNombrePromocion(pagoMapper.toPagoDto(comprobante));
+        return enriquecer(pagoMapper.toPagoDto(comprobante));
+    }
+
+    /**
+     * Abono al saldo de una factura pagada en cuotas. Cuando el saldo llega a cero la factura queda PAGADA.
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public PagoResponseDto registrarAbono(CreateAbonoDto request, User usuarioActual) {
+        if (request == null || request.getIdFactura() == null || request.getMonto() == null) {
+            throw new RuntimeException("Los datos del abono son obligatorios");
+        }
+        if (usuarioActual == null) {
+            throw new RuntimeException("Se requiere un usuario autenticado para registrar el abono");
+        }
+        Factura factura = facturaRepository.findByIdWithDetails(request.getIdFactura())
+                .orElseThrow(() -> new ResourceNotFoundException("Factura no encontrada con ID: " + request.getIdFactura()));
+        MetodoPago metodoPago = metodoPagoRepository.findById(request.getIdMetodoPago())
+                .orElseThrow(() -> new ResourceNotFoundException("Método de pago no encontrado con ID: " + request.getIdMetodoPago()));
+
+        String estadoActual = factura.getEstadoFactura() != null ? factura.getEstadoFactura().getNombre() : "";
+        BigDecimal saldo = estadoCuentaService.saldoDe(factura);
+        if (!"PENDIENTE".equalsIgnoreCase(estadoActual) || saldo.signum() <= 0) {
+            throw new RuntimeException(String.format("La factura #%d no tiene saldo pendiente", factura.getId()));
+        }
+        BigDecimal monto = request.getMonto().setScale(2, RoundingMode.HALF_UP);
+        if (monto.compareTo(saldo) > 0) {
+            throw new RuntimeException(String.format(
+                    "El abono (Q. %.2f) supera el saldo pendiente de la factura (Q. %.2f)", monto, saldo));
+        }
+
+        ComprobantePago comprobante = comprobantePagoRepository.save(ComprobantePago.builder()
+                .factura(factura)
+                .metodoPago(metodoPago)
+                .fechaPago(LocalDateTime.now())
+                .montoPagado(monto)
+                .referencia(request.getReferencia())
+                .build());
+
+        BigDecimal saldoRestante = saldo.subtract(monto);
+        if (saldoRestante.signum() == 0) {
+            factura.setEstadoFactura(estadoPagada());
+            facturaRepository.save(factura);
+        }
+
+        auditoriaService.registrar(usuarioActual, "pago", "INSERT", comprobante.getId(),
+                String.format("Abono ID %d a factura #%d por Q. %s. Saldo restante: Q. %s",
+                        comprobante.getId(), factura.getId(), monto, saldoRestante));
+
+        return enriquecer(pagoMapper.toPagoDto(comprobante));
+    }
+
+    private static final int ESTADO_FACTURA_PENDIENTE = 1;
+
+    private EstadoFactura estadoPagada() {
+        return estadoFactura(2, "PAGADA");
+    }
+
+    private EstadoFactura estadoFactura(int id, String nombre) {
+        return estadoFacturaRepository.findById(id)
+                .orElseGet(() -> estadoFacturaRepository.findByNombreIgnoreCase(nombre)
+                        .orElseGet(() -> estadoFacturaRepository.save(EstadoFactura.builder()
+                                .nombre(nombre)
+                                .descripcion("PAGADA".equals(nombre) ? "Factura pagada completamente" : "Factura con saldo pendiente")
+                                .build())));
     }
 
     public Page<PagoResponseDto> obtenerHistorialPagosPorSocio(Integer socioId, Pageable pageable) {
         Pageable sanitizedPageable = sanitizePageable(pageable, "fechaPago");
         return comprobantePagoRepository.findBySocioIdPaged(socioId, sanitizedPageable)
                 .map(pagoMapper::toPagoDto)
-                .map(this::conNombrePromocion);
+                .map(this::enriquecer);
     }
 
     public Page<PagoResponseDto> buscarHistorialPagos(Integer socioId, LocalDate fechaDesde, LocalDate fechaHasta,
@@ -290,7 +378,7 @@ public class PagoService {
         return comprobantePagoRepository
                 .buscarHistorial(socioId, desde, hastaExclusivo, idMetodoPago, sanitizedPageable)
                 .map(pagoMapper::toPagoDto)
-                .map(this::conNombrePromocion);
+                .map(this::enriquecer);
     }
 
     private Pageable sanitizePageable(Pageable pageable, String defaultSortProperty) {
@@ -311,14 +399,27 @@ public class PagoService {
     public List<PagoResponseDto> obtenerHistorialPagosPorSocio(Integer socioId) {
         List<ComprobantePago> comprobantes = comprobantePagoRepository.findBySocioIdWithDetails(socioId);
         return pagoMapper.toPagoDtoList(comprobantes).stream()
-                .map(this::conNombrePromocion)
+                .map(this::enriquecer)
                 .toList();
     }
 
     public PagoResponseDto obtenerPagoPorId(Integer id) {
         ComprobantePago comprobante = comprobantePagoRepository.findByIdWithDetails(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Pago/Comprobante no encontrado con ID: " + id));
-        return conNombrePromocion(pagoMapper.toPagoDto(comprobante));
+        return enriquecer(pagoMapper.toPagoDto(comprobante));
+    }
+
+    /** Nombre de la promoción y, para pagos en abonos, cuánto se llevaba pagado y el saldo que quedó. */
+    private PagoResponseDto enriquecer(PagoResponseDto dto) {
+        conNombrePromocion(dto);
+        if (dto != null && dto.getIdFactura() != null && dto.getIdComprobante() != null && dto.getTotalFactura() != null) {
+            BigDecimal abonado = EstadoCuentaService.cero(
+                    comprobantePagoRepository.sumPagadoHasta(dto.getIdFactura(), dto.getIdComprobante()));
+            dto.setTotalAbonado(abonado);
+            dto.setSaldoPendiente(dto.getTotalFactura().subtract(abonado).max(BigDecimal.ZERO));
+            dto.setNumeroAbono((int) Math.max(1, comprobantePagoRepository.contarHasta(dto.getIdFactura(), dto.getIdComprobante())));
+        }
+        return dto;
     }
 
     /** Agrega el nombre de la promoción aplicada para mostrarlo en el historial y en el comprobante. */

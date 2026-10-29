@@ -113,6 +113,9 @@ public class PagoMapper {
                 .referencia(comprobante.getReferencia())
                 .nombreRecepcionista(nombreRecepcionista)
                 .observacion(factura != null ? factura.getObservacion() : null)
+                .totalFactura(factura != null ? factura.getMonto() : null)
+                .estadoFactura(factura != null && factura.getEstadoFactura() != null ? factura.getEstadoFactura().getNombre() : null)
+                .fechaLimiteSaldo(factura != null ? factura.getFechaVencimiento() : null)
                 .build();
     }
 
