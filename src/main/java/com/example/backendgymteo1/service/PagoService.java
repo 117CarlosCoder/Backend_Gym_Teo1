@@ -26,6 +26,7 @@ import com.example.backendgymteo1.repository.FacturaRepository;
 import com.example.backendgymteo1.repository.MembresiaRepository;
 import com.example.backendgymteo1.repository.MetodoPagoRepository;
 import com.example.backendgymteo1.repository.RecepcionistaRepository;
+import com.example.backendgymteo1.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -55,6 +56,7 @@ public class PagoService {
     private final MembresiaRepository membresiaRepository;
     private final EstadoMembresiaRepository estadoMembresiaRepository;
     private final RecepcionistaRepository recepcionistaRepository;
+    private final UserRepository userRepository;
     private final PagoMapper pagoMapper;
     private final AuditoriaService auditoriaService;
     private final PromocionRepository promocionRepository;
@@ -231,10 +233,17 @@ public class PagoService {
                 : request.getMonto();
 
         Recepcionista recepcionista = recepcionistaRepository.findById(usuarioActual.getId())
-                .orElseGet(() -> recepcionistaRepository.save(Recepcionista.builder()
-                        .usuario(usuarioActual)
-                        .fechaContratacion(LocalDate.now())
-                        .build()));
+                .orElseGet(() -> {
+                    User usuarioManaged = userRepository != null
+                            ? userRepository.findById(usuarioActual.getId()).orElse(usuarioActual)
+                            : usuarioActual;
+                    return recepcionistaRepository.save(Recepcionista.builder()
+                            .usuario(usuarioManaged)
+                            .fechaContratacion(LocalDate.now())
+                            .build());
+                });
+
+        boolean tieneFacturasPrevias = facturaRepository.existsByMembresiaId(membresia.getId());
 
         EstadoFactura estadoFactura = esAbono ? estadoFactura(ESTADO_FACTURA_PENDIENTE, "PENDIENTE") : estadoPagada();
         LocalDate fechaLimite = esAbono ? LocalDate.now().plusDays(reglasAbono.getPlazoDias()) : LocalDate.now();
@@ -267,9 +276,20 @@ public class PagoService {
         int duracionDias = (plan != null && plan.getDuracion() != null) ? plan.getDuracion() : 30;
 
         LocalDate hoy = LocalDate.now();
-        LocalDate fechaBase = (membresia.getFechaVencimiento() != null && !membresia.getFechaVencimiento().isBefore(hoy))
-                ? membresia.getFechaVencimiento()
-                : hoy;
+        boolean esPrimerPagoVigenciaInicial = !tieneFacturasPrevias
+                && membresia.getFechaInicio() != null
+                && !membresia.getFechaInicio().isBefore(hoy)
+                && membresia.getFechaVencimiento() != null
+                && membresia.getFechaVencimiento().equals(membresia.getFechaInicio().plusDays(duracionDias));
+
+        LocalDate fechaBase;
+        if (esPrimerPagoVigenciaInicial) {
+            fechaBase = membresia.getFechaInicio();
+        } else {
+            fechaBase = (membresia.getFechaVencimiento() != null && !membresia.getFechaVencimiento().isBefore(hoy))
+                    ? membresia.getFechaVencimiento()
+                    : hoy;
+        }
 
         LocalDate nuevaFechaVencimiento = fechaBase.plusDays(duracionDias);
         membresia.setFechaVencimiento(nuevaFechaVencimiento);

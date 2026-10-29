@@ -797,4 +797,35 @@ class PagoServiceTest {
 
         assertTrue(ex.getMessage().contains("no tiene saldo pendiente"));
     }
+
+    @Test
+    @DisplayName("Primer pago de una membresía recién asignada hoy conserva la vigencia inicial del plan sin duplicarla")
+    void testRegistrarPago_PrimerPagoMembresiaRecienAsignada_NoDuplicaVigencia() {
+        LocalDate hoy = LocalDate.now();
+        PlanMembresia planMensual = PlanMembresia.builder()
+                .id(1).nombre("Plan Mensual").duracion(30).precio(new BigDecimal("250.00")).build();
+        Membresia recienCreada = Membresia.builder()
+                .id(60)
+                .socio(socioEntity)
+                .plan(planMensual)
+                .estadoMembresia(estadoActiva)
+                .fechaInicio(hoy)
+                .fechaVencimiento(hoy.plusDays(30))
+                .build();
+
+        when(membresiaRepository.findByIdWithDetails(60)).thenReturn(Optional.of(recienCreada));
+        when(metodoPagoRepository.findById(1)).thenReturn(Optional.of(metodoEfectivo));
+        when(promocionRepository.findVigentes(any(LocalDate.class))).thenReturn(List.of());
+        when(recepcionistaRepository.findById(2)).thenReturn(Optional.of(recepcionistaEntity));
+        when(facturaRepository.existsByMembresiaId(60)).thenReturn(false);
+        when(estadoFacturaRepository.findById(2)).thenReturn(Optional.of(estadoPagada));
+        when(estadoMembresiaRepository.findById(1)).thenReturn(Optional.of(estadoActiva));
+        when(facturaRepository.save(any(Factura.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(comprobantePagoRepository.save(any(ComprobantePago.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        pagoService.registrarPago(CreatePagoDto.builder()
+                .idMembresia(60).idMetodoPago(1).monto(new BigDecimal("250.00")).build(), recepcionistaUser);
+
+        assertEquals(hoy.plusDays(30), recienCreada.getFechaVencimiento());
+    }
 }
