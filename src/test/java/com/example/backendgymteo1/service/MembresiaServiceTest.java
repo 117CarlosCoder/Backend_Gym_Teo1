@@ -6,15 +6,16 @@ import com.example.backendgymteo1.dto.membresia.MembresiaResponseDto;
 import com.example.backendgymteo1.dto.membresia.UpdateMembresiaDto;
 import com.example.backendgymteo1.entity.EstadoMembresia;
 import com.example.backendgymteo1.entity.Membresia;
+import com.example.backendgymteo1.entity.Notificacion;
 import com.example.backendgymteo1.entity.PlanMembresia;
 import com.example.backendgymteo1.entity.Rol;
 import com.example.backendgymteo1.entity.Socio;
 import com.example.backendgymteo1.entity.Sucursal;
 import com.example.backendgymteo1.entity.User;
-import com.example.backendgymteo1.exception.ResourceNotFoundException;
 import com.example.backendgymteo1.mapper.MembresiaMapper;
 import com.example.backendgymteo1.repository.EstadoMembresiaRepository;
 import com.example.backendgymteo1.repository.MembresiaRepository;
+import com.example.backendgymteo1.repository.NotificacionRepository;
 import com.example.backendgymteo1.repository.PlanMembresiaRepository;
 import com.example.backendgymteo1.repository.SocioRepository;
 import com.example.backendgymteo1.repository.SucursalRepository;
@@ -31,13 +32,12 @@ import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -69,6 +69,9 @@ class MembresiaServiceTest {
 
     @Mock
     private EmailService emailService;
+
+    @Mock
+    private NotificacionRepository notificacionRepository;
 
     @InjectMocks
     private MembresiaService membresiaService;
@@ -302,5 +305,25 @@ class MembresiaServiceTest {
         assertEquals("CANCELADA", membresiaPrevia.getEstadoMembresia().getNombre());
         verify(auditoriaService).registrar(eq(adminUser), eq("membresia"), eq("CANCEL"), eq(10), anyString());
         verify(auditoriaService).registrar(eq(adminUser), eq("membresia"), eq("INSERT"), any(), anyString());
+    }
+
+    @Test
+    @DisplayName("Enviar recordatorio de vencimiento manual envía correo, guarda notificación en bandeja y registra auditoría")
+    void testEnviarRecordatorioVencimiento_CreaNotificacionYEnviaCorreo() {
+        when(membresiaRepository.findByIdWithDetails(50)).thenReturn(Optional.of(membresiaEntity));
+        when(notificacionRepository.existsByMembresiaIdAndFechaVencimientoAndUmbralDias(
+                eq(50), eq(membresiaEntity.getFechaVencimiento()), eq(7))).thenReturn(false);
+
+        membresiaService.enviarRecordatorioVencimiento(50, adminUser);
+
+        verify(emailService).enviarRecordatorioVencimiento(
+                eq("socio@gym.com"),
+                eq("Pedro Picapiedra"),
+                eq("Plan Mensual"),
+                eq(membresiaEntity.getFechaVencimiento()),
+                anyLong()
+        );
+        verify(notificacionRepository).save(any(Notificacion.class));
+        verify(auditoriaService).registrar(eq(adminUser), eq("membresia"), eq("NOTIFY"), eq(50), anyString());
     }
 }

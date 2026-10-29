@@ -17,6 +17,8 @@ import org.springframework.stereotype.Service;
 
 import java.awt.Color;
 import java.io.ByteArrayOutputStream;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.format.DateTimeFormatter;
 
 @Slf4j
@@ -121,9 +123,43 @@ public class PdfComprobanteService {
             addTableCell(pagoTable, "Método de Pago:", metodoStr, fontLabel, fontValue);
             addTableCell(pagoTable, "Referencia / Voucher:", pago.getReferencia() != null ? pago.getReferencia() : "Sin referencia", fontLabel, fontValue);
             addTableCell(pagoTable, "Atendido por:", pago.getNombreRecepcionista() != null ? pago.getNombreRecepcionista() : "Recepción", fontLabel, fontValue);
-            addTableCell(pagoTable, "Monto Total Pagado:", montoStr, fontLabel, fontAmount);
-
             document.add(pagoTable);
+            document.add(new Paragraph(" "));
+
+            // Desglose del cobro: precio del plan, descuento (promoción) y recargo por pago tardío (mora)
+            document.add(createSectionTitle("DESGLOSE DEL COBRO", fontSectionHeader));
+            PdfPTable desgloseTable = new PdfPTable(2);
+            desgloseTable.setWidthPercentage(100);
+            desgloseTable.setWidths(new float[]{60f, 40f});
+            Font fontDescuento = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 10, new Color(22, 101, 52));
+            Font fontRecargo = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 10, new Color(185, 28, 28));
+
+            BigDecimal descuento = valorOCero(pago.getDescuento());
+            BigDecimal recargo = valorOCero(pago.getRecargo());
+            BigDecimal base = pago.getMontoBase() != null
+                    ? pago.getMontoBase()
+                    : valorOCero(pago.getMontoPagado()).add(descuento).subtract(recargo);
+
+            addTableCell(desgloseTable, "Precio del plan:", formatoQuetzales(base), fontLabel, fontValue);
+            if (descuento.signum() > 0) {
+                String etiqueta = pago.getNombrePromocion() != null
+                        ? "Descuento aplicado (" + pago.getNombrePromocion() + "):"
+                        : "Descuento aplicado:";
+                addTableCell(desgloseTable, etiqueta, "- " + formatoQuetzales(descuento), fontLabel, fontDescuento);
+            } else {
+                addTableCell(desgloseTable, "Descuento aplicado:", "No aplica", fontLabel, fontValue);
+            }
+            if (recargo.signum() > 0) {
+                String etiqueta = base.signum() > 0
+                        ? String.format("Recargo por pago tardío / mora (%s%%):",
+                                recargo.multiply(BigDecimal.valueOf(100)).divide(base, 0, RoundingMode.HALF_UP))
+                        : "Recargo por pago tardío / mora:";
+                addTableCell(desgloseTable, etiqueta, "+ " + formatoQuetzales(recargo), fontLabel, fontRecargo);
+            } else {
+                addTableCell(desgloseTable, "Recargo por pago tardío / mora:", "No aplica (pago a tiempo)", fontLabel, fontValue);
+            }
+            addTableCell(desgloseTable, "Monto Total Pagado:", montoStr, fontLabel, fontAmount);
+            document.add(desgloseTable);
             document.add(new Paragraph(" "));
             document.add(new Paragraph(" "));
 
@@ -138,6 +174,14 @@ public class PdfComprobanteService {
         }
 
         return out.toByteArray();
+    }
+
+    private static BigDecimal valorOCero(BigDecimal valor) {
+        return valor != null ? valor : BigDecimal.ZERO;
+    }
+
+    private static String formatoQuetzales(BigDecimal valor) {
+        return String.format("Q. %.2f", valorOCero(valor));
     }
 
     private Paragraph createSectionTitle(String text, Font font) {

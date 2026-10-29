@@ -38,6 +38,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -116,8 +117,14 @@ public class PagoController {
     })
     @GetMapping("/cotizacion/{idMembresia}")
     @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
-    public ResponseEntity<CotizacionPagoDto> cotizarPago(@PathVariable Integer idMembresia) {
-        return ResponseEntity.ok(pagoService.cotizarPago(idMembresia));
+    public ResponseEntity<CotizacionPagoDto> cotizarPago(
+            @PathVariable Integer idMembresia,
+            @RequestParam(required = false) Integer idPromocion,
+            @RequestParam(required = false) BigDecimal descuento) {
+        if (idPromocion == null && descuento == null) {
+            return ResponseEntity.ok(pagoService.cotizarPago(idMembresia));
+        }
+        return ResponseEntity.ok(pagoService.cotizarPago(idMembresia, idPromocion, descuento));
     }
 
     @Operation(summary = "Obtener detalle de pago por ID", description = "Retorna el comprobante y detalle completo de la transacción.")

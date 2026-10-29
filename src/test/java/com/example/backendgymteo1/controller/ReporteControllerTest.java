@@ -183,6 +183,29 @@ class ReporteControllerTest {
     }
 
     @Test
+    void testGetDashboardResumen_recepcionistaNoVeIngresos() throws Exception {
+        currentUser.setRol(Rol.recepcionista());
+        DashboardResumenDto dto = DashboardResumenDto.builder()
+                .ingresosMesActual(new BigDecimal("20000.00"))
+                .ingresosMesAnterior(new BigDecimal("18000.00"))
+                .crecimientoIngresosPorcentaje(11.11)
+                .totalSociosActivos(150L)
+                .asistenciasHoy(45L)
+                .build();
+
+        when(reporteService.getDashboardResumen()).thenReturn(dto);
+
+        mockMvc.perform(get("/reportes/dashboard")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ingresosMesActual").doesNotExist())
+                .andExpect(jsonPath("$.ingresosMesAnterior").doesNotExist())
+                .andExpect(jsonPath("$.crecimientoIngresosPorcentaje").doesNotExist())
+                .andExpect(jsonPath("$.totalSociosActivos").value(150))
+                .andExpect(jsonPath("$.asistenciasHoy").value(45));
+    }
+
+    @Test
     void testGetMetricasAsistencia() throws Exception {
         MetricaAsistenciaDto dto = MetricaAsistenciaDto.builder()
                 .rol("ADMIN")

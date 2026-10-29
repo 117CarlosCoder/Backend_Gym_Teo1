@@ -195,12 +195,12 @@ public class MembresiaController {
         @GetMapping("/proximas-a-vencer")
         @PreAuthorize("hasAnyRole('ADMIN', 'RECEPCIONISTA')")
         public ResponseEntity<Page<MembresiaResponseDto>> obtenerProximasAVencer(
-                        @RequestParam(required = false, defaultValue = "30") Integer dias,
+                        @RequestParam(required = false, defaultValue = "7") Integer dias,
                         @PageableDefault(size = 10, sort = "fechaVencimiento") Pageable pageable) {
                 return ResponseEntity.ok(membresiaService.obtenerProximasAVencer(dias, pageable));
         }
 
-        @Operation(summary = "Enviar correo de recordatorio de vencimiento", description = "Envía una notificación por correo electrónico al socio notificando la fecha de vencimiento y días restantes.")
+        @Operation(summary = "Enviar correo de recordatorio de vencimiento", description = "Envía una notificación por correo electrónico al socio y registra el aviso en su bandeja de notificaciones notificando la fecha de vencimiento y días restantes.")
         @ApiResponses(value = {
                         @ApiResponse(responseCode = "200", description = "Correo de recordatorio enviado exitosamente"),
                         @ApiResponse(responseCode = "401", description = "No autenticado", content = @Content),

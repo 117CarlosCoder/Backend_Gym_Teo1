@@ -62,19 +62,66 @@ public class PagoService {
     private static final BigDecimal MONTO_MINIMO = new BigDecimal("0.01");
 
     public CotizacionPagoDto calcularCotizacion(Membresia membresia, LocalDate hoy) {
+        return calcularCotizacion(membresia, hoy, null, null, null);
+    }
+
+    public CotizacionPagoDto calcularCotizacion(Membresia membresia, LocalDate hoy,
+                                                Integer idPromocionSolicitada,
+                                                BigDecimal descuentoSolicitado,
+                                                BigDecimal porcentajeDescuentoSolicitado) {
         BigDecimal base = (membresia.getPlan() != null && membresia.getPlan().getPrecio() != null)
                 ? membresia.getPlan().getPrecio().setScale(2, RoundingMode.HALF_UP)
                 : BigDecimal.ZERO.setScale(2);
 
-        Promocion mejorPromocion = promocionRepository.findVigentes(hoy).stream()
-                .max(Comparator.comparing(p -> p.calcularDescuento(base)))
-                .orElse(null);
-
+        BigDecimal maxDescuento = base.subtract(MONTO_MINIMO).max(BigDecimal.ZERO);
         BigDecimal descuento = BigDecimal.ZERO.setScale(2);
-        if (mejorPromocion != null) {
-            // El total nunca puede quedar por debajo de MONTO_MINIMO (restricción chk_monto_factura)
-            descuento = mejorPromocion.calcularDescuento(base)
-                    .min(base.subtract(MONTO_MINIMO).max(BigDecimal.ZERO));
+        Integer idPromocionAplicada = null;
+        String nombrePromocionAplicada = null;
+
+        if (idPromocionSolicitada != null && idPromocionSolicitada > 0) {
+            Promocion promocion = promocionRepository.findById(idPromocionSolicitada)
+                    .orElseThrow(() -> new ResourceNotFoundException("Promoción no encontrada con ID: " + idPromocionSolicitada));
+            if (!promocion.estaVigente(hoy)) {
+                throw new RuntimeException("La promoción seleccionada no está vigente");
+            }
+            descuento = promocion.calcularDescuento(base).min(maxDescuento);
+            if (descuento.signum() > 0) {
+                idPromocionAplicada = promocion.getId();
+                nombrePromocionAplicada = promocion.getNombre();
+            }
+        } else if (descuentoSolicitado != null && descuentoSolicitado.compareTo(BigDecimal.ZERO) > 0) {
+            if (descuentoSolicitado.compareTo(base) > 0) {
+                throw new RuntimeException("El descuento no puede ser mayor al precio base del plan");
+            }
+            descuento = descuentoSolicitado.setScale(2, RoundingMode.HALF_UP).min(maxDescuento);
+            BigDecimal descuentoCalculado = descuento;
+            Promocion promocionCoincidente = promocionRepository.findVigentes(hoy).stream()
+                    .filter(p -> p.calcularDescuento(base).min(maxDescuento).compareTo(descuentoCalculado) == 0)
+                    .findFirst()
+                    .orElse(null);
+            if (promocionCoincidente != null) {
+                idPromocionAplicada = promocionCoincidente.getId();
+                nombrePromocionAplicada = promocionCoincidente.getNombre();
+            }
+        } else if (porcentajeDescuentoSolicitado != null && porcentajeDescuentoSolicitado.compareTo(BigDecimal.ZERO) > 0) {
+            if (porcentajeDescuentoSolicitado.compareTo(new BigDecimal("100")) > 0) {
+                throw new RuntimeException("El porcentaje de descuento no puede superar el 100%");
+            }
+            descuento = base.multiply(porcentajeDescuentoSolicitado)
+                    .divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP)
+                    .min(maxDescuento);
+        } else {
+            Promocion mejorPromocion = promocionRepository.findVigentes(hoy).stream()
+                    .max(Comparator.comparing(p -> p.calcularDescuento(base)))
+                    .orElse(null);
+            if (mejorPromocion != null) {
+                // El total nunca puede quedar por debajo de MONTO_MINIMO (restricción chk_monto_factura)
+                descuento = mejorPromocion.calcularDescuento(base).min(maxDescuento);
+                if (descuento.signum() > 0) {
+                    idPromocionAplicada = mejorPromocion.getId();
+                    nombrePromocionAplicada = mejorPromocion.getNombre();
+                }
+            }
         }
 
         LocalDate vencimiento = membresia.getFechaVencimiento();
@@ -91,8 +138,8 @@ public class PagoService {
         return CotizacionPagoDto.builder()
                 .idMembresia(membresia.getId())
                 .montoBase(base)
-                .idPromocion(descuento.signum() > 0 ? mejorPromocion.getId() : null)
-                .nombrePromocion(descuento.signum() > 0 ? mejorPromocion.getNombre() : null)
+                .idPromocion(idPromocionAplicada)
+                .nombrePromocion(nombrePromocionAplicada)
                 .descuento(descuento)
                 .pagoTardio(tardio)
                 .diasAtraso(diasAtraso)
@@ -104,9 +151,13 @@ public class PagoService {
     }
 
     public CotizacionPagoDto cotizarPago(Integer idMembresia) {
+        return cotizarPago(idMembresia, null, null);
+    }
+
+    public CotizacionPagoDto cotizarPago(Integer idMembresia, Integer idPromocion, BigDecimal descuento) {
         Membresia membresia = membresiaRepository.findByIdWithDetails(idMembresia)
                 .orElseThrow(() -> new ResourceNotFoundException("Membresía no encontrada con ID: " + idMembresia));
-        return calcularCotizacion(membresia, LocalDate.now());
+        return calcularCotizacion(membresia, LocalDate.now(), idPromocion, descuento, null);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -124,12 +175,35 @@ public class PagoService {
         MetodoPago metodoPago = metodoPagoRepository.findById(request.getIdMetodoPago())
                 .orElseThrow(() -> new ResourceNotFoundException("Método de pago no encontrado con ID: " + request.getIdMetodoPago()));
 
-        CotizacionPagoDto cotizacion = calcularCotizacion(membresia, LocalDate.now());
+        CotizacionPagoDto cotizacion = calcularCotizacion(
+                membresia,
+                LocalDate.now(),
+                request.getIdPromocion(),
+                request.getDescuento(),
+                request.getPorcentajeDescuento()
+        );
+
+        if (request.getMonto() != null
+                && cotizacion.getDescuento().signum() > 0
+                && cotizacion.getRecargo().signum() > 0) {
+            BigDecimal totalSinRecargo = cotizacion.getMontoBase()
+                    .subtract(cotizacion.getDescuento())
+                    .max(MONTO_MINIMO);
+            if (request.getMonto().compareTo(totalSinRecargo) == 0) {
+                cotizacion.setRecargo(BigDecimal.ZERO.setScale(2));
+                cotizacion.setTotal(totalSinRecargo);
+            }
+        }
 
         if (request.getMonto() == null || request.getMonto().compareTo(cotizacion.getTotal()) < 0) {
             throw new RuntimeException(String.format("Disculpe pero su deuda es de Q. %.2f", cotizacion.getTotal()));
         }
 
+        BigDecimal montoSinDescuento = cotizacion.getMontoBase().add(cotizacion.getRecargo());
+        BigDecimal montoPagado = (cotizacion.getDescuento().signum() > 0
+                && request.getMonto().compareTo(montoSinDescuento) == 0)
+                ? cotizacion.getTotal()
+                : request.getMonto();
 
         Recepcionista recepcionista = recepcionistaRepository.findById(usuarioActual.getId())
                 .orElseGet(() -> recepcionistaRepository.save(Recepcionista.builder()
@@ -163,7 +237,7 @@ public class PagoService {
                 .factura(factura)
                 .metodoPago(metodoPago)
                 .fechaPago(LocalDateTime.now())
-                .montoPagado(request.getMonto())
+                .montoPagado(montoPagado)
                 .referencia(request.getReferencia())
                 .build();
         comprobante = comprobantePagoRepository.save(comprobante);
@@ -191,17 +265,18 @@ public class PagoService {
                 "INSERT",
                 comprobante.getId(),
                 String.format("Pago registrado ID %d (Monto: %s, Ref: %s). Nueva fecha vencimiento membresía ID %d: %s",
-                        comprobante.getId(), request.getMonto(), request.getReferencia(), membresia.getId(), nuevaFechaVencimiento)
+                        comprobante.getId(), montoPagado, request.getReferencia(), membresia.getId(), nuevaFechaVencimiento)
         );
 
         avisoPagoService.registrar(factura, cotizacion);
-        return pagoMapper.toPagoDto(comprobante);
+        return conNombrePromocion(pagoMapper.toPagoDto(comprobante));
     }
 
     public Page<PagoResponseDto> obtenerHistorialPagosPorSocio(Integer socioId, Pageable pageable) {
         Pageable sanitizedPageable = sanitizePageable(pageable, "fechaPago");
         return comprobantePagoRepository.findBySocioIdPaged(socioId, sanitizedPageable)
-                .map(pagoMapper::toPagoDto);
+                .map(pagoMapper::toPagoDto)
+                .map(this::conNombrePromocion);
     }
 
     public Page<PagoResponseDto> buscarHistorialPagos(Integer socioId, LocalDate fechaDesde, LocalDate fechaHasta,
@@ -214,7 +289,8 @@ public class PagoService {
         Pageable sanitizedPageable = sanitizePageable(pageable, "fechaPago");
         return comprobantePagoRepository
                 .buscarHistorial(socioId, desde, hastaExclusivo, idMetodoPago, sanitizedPageable)
-                .map(pagoMapper::toPagoDto);
+                .map(pagoMapper::toPagoDto)
+                .map(this::conNombrePromocion);
     }
 
     private Pageable sanitizePageable(Pageable pageable, String defaultSortProperty) {
@@ -234,13 +310,24 @@ public class PagoService {
 
     public List<PagoResponseDto> obtenerHistorialPagosPorSocio(Integer socioId) {
         List<ComprobantePago> comprobantes = comprobantePagoRepository.findBySocioIdWithDetails(socioId);
-        return pagoMapper.toPagoDtoList(comprobantes);
+        return pagoMapper.toPagoDtoList(comprobantes).stream()
+                .map(this::conNombrePromocion)
+                .toList();
     }
 
     public PagoResponseDto obtenerPagoPorId(Integer id) {
         ComprobantePago comprobante = comprobantePagoRepository.findByIdWithDetails(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Pago/Comprobante no encontrado con ID: " + id));
-        return pagoMapper.toPagoDto(comprobante);
+        return conNombrePromocion(pagoMapper.toPagoDto(comprobante));
+    }
+
+    /** Agrega el nombre de la promoción aplicada para mostrarlo en el historial y en el comprobante. */
+    private PagoResponseDto conNombrePromocion(PagoResponseDto dto) {
+        if (dto != null && dto.getIdPromocion() != null && dto.getNombrePromocion() == null) {
+            promocionRepository.findById(dto.getIdPromocion())
+                    .ifPresent(promocion -> dto.setNombrePromocion(promocion.getNombre()));
+        }
+        return dto;
     }
 
     public List<MetodoPagoResponseDto> listarMetodosPago() {
