@@ -20,6 +20,7 @@ public interface MembresiaRepository extends JpaRepository<Membresia, Integer> {
         @Query("SELECT DISTINCT m FROM Membresia m " +
                         "JOIN FETCH m.socio s " +
                         "JOIN FETCH s.usuario u " +
+                        "LEFT JOIN FETCH s.sucursal " +
                         "JOIN FETCH m.plan p " +
                         "JOIN FETCH m.estadoMembresia e " +
                         "LEFT JOIN FETCH m.sucursales " +
@@ -29,6 +30,7 @@ public interface MembresiaRepository extends JpaRepository<Membresia, Integer> {
         @Query("SELECT DISTINCT m FROM Membresia m " +
                         "JOIN FETCH m.socio s " +
                         "JOIN FETCH s.usuario u " +
+                        "LEFT JOIN FETCH s.sucursal " +
                         "JOIN FETCH m.plan p " +
                         "JOIN FETCH m.estadoMembresia e " +
                         "LEFT JOIN FETCH m.sucursales suc " +
@@ -49,7 +51,7 @@ public interface MembresiaRepository extends JpaRepository<Membresia, Integer> {
                         @Param("fechaDesde") LocalDate fechaDesde,
                         @Param("fechaHasta") LocalDate fechaHasta);
 
-        @EntityGraph(attributePaths = { "socio", "socio.usuario", "plan", "estadoMembresia", "sucursales" })
+        @EntityGraph(attributePaths = { "socio", "socio.usuario", "socio.sucursal", "plan", "estadoMembresia", "sucursales" })
         @Query(value = "SELECT DISTINCT m FROM Membresia m " +
                         "LEFT JOIN m.sucursales suc " +
                         "WHERE (:socioId IS NULL OR m.socio.id = :socioId) " +
@@ -82,6 +84,7 @@ public interface MembresiaRepository extends JpaRepository<Membresia, Integer> {
         @Query("SELECT DISTINCT m FROM Membresia m " +
                         "JOIN FETCH m.socio s " +
                         "JOIN FETCH s.usuario u " +
+                        "LEFT JOIN FETCH s.sucursal " +
                         "JOIN FETCH m.plan p " +
                         "JOIN FETCH m.estadoMembresia e " +
                         "LEFT JOIN FETCH m.sucursales " +
@@ -106,6 +109,7 @@ public interface MembresiaRepository extends JpaRepository<Membresia, Integer> {
         @Query("SELECT DISTINCT m FROM Membresia m " +
                         "JOIN FETCH m.socio s " +
                         "JOIN FETCH s.usuario u " +
+                        "LEFT JOIN FETCH s.sucursal " +
                         "JOIN FETCH m.plan p " +
                         "JOIN FETCH m.estadoMembresia e " +
                         "LEFT JOIN FETCH m.sucursales " +
@@ -124,6 +128,7 @@ public interface MembresiaRepository extends JpaRepository<Membresia, Integer> {
         @Query("SELECT DISTINCT m FROM Membresia m " +
                         "JOIN FETCH m.socio s " +
                         "JOIN FETCH s.usuario u " +
+                        "LEFT JOIN FETCH s.sucursal " +
                         "JOIN FETCH m.plan p " +
                         "JOIN FETCH m.estadoMembresia e " +
                         "LEFT JOIN FETCH m.sucursales " +
@@ -169,22 +174,29 @@ public interface MembresiaRepository extends JpaRepository<Membresia, Integer> {
         @Query("SELECT DISTINCT m FROM Membresia m " +
                         "JOIN FETCH m.socio s " +
                         "JOIN FETCH s.usuario u " +
+                        "LEFT JOIN FETCH s.sucursal " +
                         "JOIN FETCH m.plan p " +
                         "JOIN FETCH m.estadoMembresia e " +
                         "LEFT JOIN FETCH m.sucursales " +
-                        "WHERE e.id = 1 " +
+                        "WHERE (e.id = 1 OR UPPER(e.nombre) = 'ACTIVA') " +
+                        "AND s.activo = true AND s.eliminadoEn IS NULL " +
+                        "AND u.estado = true AND u.eliminadoEn IS NULL " +
                         "AND m.fechaVencimiento BETWEEN :hoy AND :fechaLimite " +
                         "ORDER BY m.fechaVencimiento ASC")
         List<Membresia> findProximasAVencer(
                         @Param("hoy") LocalDate hoy,
                         @Param("fechaLimite") LocalDate fechaLimite);
 
-        @EntityGraph(attributePaths = { "socio", "socio.usuario", "plan", "estadoMembresia", "sucursales" })
+        @EntityGraph(attributePaths = { "socio", "socio.usuario", "socio.sucursal", "plan", "estadoMembresia", "sucursales" })
         @Query(value = "SELECT DISTINCT m FROM Membresia m " +
-                        "WHERE m.estadoMembresia.id = 1 " +
+                        "WHERE (m.estadoMembresia.id = 1 OR UPPER(m.estadoMembresia.nombre) = 'ACTIVA') " +
+                        "AND m.socio.activo = true AND m.socio.eliminadoEn IS NULL " +
+                        "AND m.socio.usuario.estado = true AND m.socio.usuario.eliminadoEn IS NULL " +
                         "AND m.fechaVencimiento BETWEEN :hoy AND :fechaLimite", countQuery = "SELECT COUNT(DISTINCT m) FROM Membresia m "
                                         +
-                                        "WHERE m.estadoMembresia.id = 1 " +
+                                        "WHERE (m.estadoMembresia.id = 1 OR UPPER(m.estadoMembresia.nombre) = 'ACTIVA') " +
+                                        "AND m.socio.activo = true AND m.socio.eliminadoEn IS NULL " +
+                                        "AND m.socio.usuario.estado = true AND m.socio.usuario.eliminadoEn IS NULL " +
                                         "AND m.fechaVencimiento BETWEEN :hoy AND :fechaLimite")
         Page<Membresia> findProximasAVencerPaged(
                         @Param("hoy") LocalDate hoy,

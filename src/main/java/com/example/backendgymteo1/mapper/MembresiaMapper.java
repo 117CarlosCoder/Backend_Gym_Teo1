@@ -32,7 +32,8 @@ public class MembresiaMapper {
 
         LocalDate hoy = LocalDate.now();
         boolean isActiva = membresia.getEstadoMembresia() != null
-                && "ACTIVA".equalsIgnoreCase(membresia.getEstadoMembresia().getNombre())
+                && (Integer.valueOf(1).equals(membresia.getEstadoMembresia().getId())
+                        || "ACTIVA".equalsIgnoreCase(membresia.getEstadoMembresia().getNombre()))
                 && membresia.getFechaVencimiento() != null
                 && !membresia.getFechaVencimiento().isBefore(hoy);
 
@@ -53,9 +54,11 @@ public class MembresiaMapper {
             nombreUsuarioCancelo = membresia.getUsuarioCancelo().getNombres() + " " + membresia.getUsuarioCancelo().getApellidos();
         }
 
+        MembresiaResumenDto resumenActiva = isActiva ? toResumenDto(membresia) : null;
+
         return MembresiaResponseDto.builder()
                 .id(membresia.getId())
-                .socio(socioMapper.toDto(membresia.getSocio()))
+                .socio(socioMapper.toDto(membresia.getSocio(), null, resumenActiva, null))
                 .plan(toPlanDto(membresia.getPlan()))
                 .estado(toEstadoDto(membresia.getEstadoMembresia()))
                 .fechaInicio(membresia.getFechaInicio())
@@ -79,7 +82,8 @@ public class MembresiaMapper {
 
         LocalDate hoy = LocalDate.now();
         boolean isActiva = membresia.getEstadoMembresia() != null
-                && "ACTIVA".equalsIgnoreCase(membresia.getEstadoMembresia().getNombre())
+                && (Integer.valueOf(1).equals(membresia.getEstadoMembresia().getId())
+                        || "ACTIVA".equalsIgnoreCase(membresia.getEstadoMembresia().getNombre()))
                 && membresia.getFechaVencimiento() != null
                 && !membresia.getFechaVencimiento().isBefore(hoy);
 
