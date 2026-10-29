@@ -6,14 +6,17 @@ import com.example.backendgymteo1.dto.membresia.MembresiaResponseDto;
 import com.example.backendgymteo1.dto.membresia.UpdateMembresiaDto;
 import com.example.backendgymteo1.entity.EstadoMembresia;
 import com.example.backendgymteo1.entity.Membresia;
+import com.example.backendgymteo1.entity.Notificacion;
 import com.example.backendgymteo1.entity.PlanMembresia;
 import com.example.backendgymteo1.entity.Socio;
 import com.example.backendgymteo1.entity.Sucursal;
+import com.example.backendgymteo1.entity.TipoNotificacion;
 import com.example.backendgymteo1.entity.User;
 import com.example.backendgymteo1.exception.ResourceNotFoundException;
 import com.example.backendgymteo1.mapper.MembresiaMapper;
 import com.example.backendgymteo1.repository.EstadoMembresiaRepository;
 import com.example.backendgymteo1.repository.MembresiaRepository;
+import com.example.backendgymteo1.repository.NotificacionRepository;
 import com.example.backendgymteo1.repository.PlanMembresiaRepository;
 import com.example.backendgymteo1.repository.SocioRepository;
 import com.example.backendgymteo1.repository.SucursalRepository;
@@ -27,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -46,6 +50,7 @@ public class MembresiaService {
     private final MembresiaMapper membresiaMapper;
     private final AuditoriaService auditoriaService;
     private final EmailService emailService;
+    private final NotificacionRepository notificacionRepository;
 
     @Transactional(rollbackFor = Exception.class)
     public MembresiaResponseDto create(CreateMembresiaDto request) {
@@ -342,7 +347,7 @@ public class MembresiaService {
             String nombreSocio = socioUser.getNombres() + " " + socioUser.getApellidos();
             String nombrePlan = membresia.getPlan() != null ? membresia.getPlan().getNombre() : "Membresía";
             LocalDate fechaVencimiento = membresia.getFechaVencimiento();
-            long diasRestantes = java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(), fechaVencimiento);
+            long diasRestantes = ChronoUnit.DAYS.between(LocalDate.now(), fechaVencimiento);
 
             emailService.enviarRecordatorioVencimiento(
                     socioUser.getCorreo(),
@@ -351,6 +356,27 @@ public class MembresiaService {
                     fechaVencimiento,
                     diasRestantes
             );
+
+            if (notificacionRepository != null
+                    && !notificacionRepository.existsByMembresiaIdAndFechaVencimientoAndUmbralDias(membresia.getId(), fechaVencimiento, 7)) {
+                String mensaje = String.format(
+                        "Tu membresía del plan '%s' vencerá el %s (%d día(s) restante(s)). Por favor acércate a recepción para renovarla.",
+                        nombrePlan,
+                        fechaVencimiento,
+                        diasRestantes
+                );
+                notificacionRepository.save(Notificacion.builder()
+                        .usuario(socioUser)
+                        .membresia(membresia)
+                        .tipo(TipoNotificacion.VENCIMIENTO_MEMBRESIA)
+                        .titulo("Recordatorio de Vencimiento de Membresía")
+                        .mensaje(mensaje)
+                        .leida(false)
+                        .fechaCreacion(LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS))
+                        .fechaVencimiento(fechaVencimiento)
+                        .umbralDias(7)
+                        .build());
+            }
 
             auditoriaService.registrar(
                     usuarioActual,
@@ -362,4 +388,3 @@ public class MembresiaService {
         }
     }
 }
-
